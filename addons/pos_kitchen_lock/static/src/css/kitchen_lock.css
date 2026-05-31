@@ -1,0 +1,60 @@
+/* kitchen-sent-locked is applied via PosOrderline.getDisplayClasses() in kitchen_lock.js.
+   It lands on the <li class="orderline ..."> element through lineContainerClasses. */
+
+.orderline.kitchen-sent-locked {
+  opacity: 0.55;
+  position: relative;
+}
+
+/* Purple left-edge accent */
+.orderline.kitchen-sent-locked::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 5px;
+  background: #e78888;
+  border-radius: 2px;
+}
+
+/* Selected kitchen-sent line: full red highlight, no fade */
+.orderline.kitchen-sent-locked.selected {
+  background-color: #fde8e8;
+  opacity: 1;
+}
+
+.orderline.kitchen-sent-locked.selected::before {
+  background: #dc3545;
+}
+
+/* RKPOS brand text in the top navbar */
+.rkpos-navbar-brand {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #4a4a6a;
+  user-select: none;
+}
+
+/* RKPOS brand text on the screensaver */
+.rkpos-saver-brand {
+  font-size: 8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(0, 0, 0, 0.18);
+  user-select: none;
+}
+
+/* Hide "Powered by Odoo" on printed receipts and screen preview */
+.pos-receipt-order-data {
+  display: none !important;
+}
+
+/* Lock badge injected by the Orderline template extension */
+.kitchen-lock-badge {
+  font-size: 11px;
+  margin-left: 4px;
+  vertical-align: middle;
+  pointer-events: none;
+}
