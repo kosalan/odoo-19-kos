@@ -189,3 +189,97 @@
     text-align: center;
     padding: 0 12px;
 }
+
+/* ── PIN dialog ──────────────────────────────────────────────────────────── */
+.att-pin-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+.att-pin-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 340px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+.att-pin-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+.att-pin-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+.att-pin-sub {
+    font-size: 13px;
+    color: #875a7b;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+.att-pin-display {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin: 8px 0 18px;
+}
+.att-pin-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #ccc;
+    background: transparent;
+    transition: background 0.15s;
+}
+.att-pin-dot.filled {
+    background: #875a7b;
+    border-color: #875a7b;
+}
+.att-pin-error {
+    text-align: center;
+    color: #dc3545;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+.att-pin-pad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+.att-pin-key {
+    background: #f4f6f9;
+    border: none;
+    border-radius: 10px;
+    padding: 18px 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: #1a1a2e;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.att-pin-key:hover  { background: #e6e8ed; }
+.att-pin-key:active { background: #d9dbe0; }
+.att-pin-key-action { background: #ffe5e5; color: #c0392b; }
+.att-pin-key-action:hover { background: #ffd0d0; }
+.att-pin-key-ok     { background: #875a7b; color: #fff; }
+.att-pin-key-ok:hover { background: #6d4a65; }
+.att-pin-cancel {
+    margin-top: 18px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 10px;
+    color: #666;
+    font-weight: 600;
+    cursor: pointer;
+}
+.att-pin-cancel:hover { background: #f4f6f9; }

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!-- Inject reporting button into navbar — before the Dropdown (hamburger) -->
+    <t t-name="pos_kitchen_reporting.Navbar"
+       t-inherit="point_of_sale.Navbar" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('status-buttons')]/Dropdown" position="before">
+            <ReportingButton/>
+        </xpath>
+    </t>
+
+    <!-- Login screen — large button after Open Register -->
+    <t t-name="pos_kitchen_reporting.LoginScreen"
+       t-inherit="point_of_sale.LoginScreen" t-inherit-mode="extension">
+        <xpath expr="//button[hasclass('open-register-btn')]" position="after">
+            <ReportingLoginButton/>
+        </xpath>
+    </t>
+
+    <!-- Small navbar button -->
+    <t t-name="pos_kitchen_reporting.ReportingButton">
+        <button class="btn btn-light btn-lg lh-lg reporting-nav-btn"
+                t-on-click="() => this.state.open = true"
+                title="My Report">
+            <i class="fa fa-fw fa-file-text-o"/>
+        </button>
+        <ReportingKiosk t-if="state.open" onClose="() => this.state.open = false"/>
+    </t>
+
+    <!-- Large login-screen button -->
+    <t t-name="pos_kitchen_reporting.ReportingLoginButton">
+        <button class="reporting-login-btn btn btn-light btn-lg d-flex flex-column align-items-center flex-grow-1 flex-basis-100 gap-2 p-5 rounded-4 lh-lg"
+                t-on-click="() => this.state.open = true">
+            <i class="fa fa-file-text-o fa-3x" aria-hidden="true"/>
+            <span class="d-flex flex-grow-1 align-items-center">My Report</span>
+        </button>
+        <ReportingKiosk t-if="state.open" onClose="() => this.state.open = false"/>
+    </t>
+
+</templates>

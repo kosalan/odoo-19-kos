@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.ServerReportReceipt">
+        <div class="pos-receipt" style="font-family: monospace; width: 300px; padding: 4px;">
+            <div style="text-align:center; font-size:10px; color:#666;">
+                <t t-esc="new Date().toLocaleString()"/>
+            </div>
+            <div style="text-align:center; font-weight:bold; font-size:14px;">SERVER REPORT</div>
+            <div style="text-align:center;" t-esc="props.data.employee.name"/>
+            <div style="text-align:center; font-size:11px;">
+                Session: <t t-esc="props.data.session.name"/>
+            </div>
+            <div style="text-align:center; font-size:11px;"
+                 t-esc="props.data.employee.department"/>
+            <div style="border-top: 1px dashed #000; margin: 4px 0;"/>
+
+            <div>Worked: <t t-esc="minutesToHm(props.data.attendance.total_worked_minutes)"/></div>
+            <div>Breaks: <t t-esc="minutesToHm(props.data.attendance.total_break_minutes)"/></div>
+
+            <div t-if="props.data.attendance.punches.length" style="margin-top:4px;">
+                <div style="font-weight:bold; font-size:11px;">PUNCHES</div>
+                <t t-foreach="props.data.attendance.punches" t-as="p" t-key="p_index">
+                    <div style="font-size:10px;">
+                        In:&#160;<t t-esc="formatDt(p.check_in)"/>
+                    </div>
+                    <div style="font-size:10px;">
+                        Out: <t t-esc="formatDt(p.check_out)"/>
+                    </div>
+                </t>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 4px 0;"/>
+            <div style="font-weight:bold;">SALES</div>
+            <t t-foreach="props.data.sales_by_method" t-as="row" t-key="row.method">
+                <div style="display:flex; justify-content:space-between;">
+                    <span t-esc="row.method"/>
+                    <span t-esc="fmt(row.amount)"/>
+                </div>
+            </t>
+            <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                <span>Total Sales</span>
+                <span t-esc="fmt(props.data.total_sales)"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 4px 0;"/>
+            <div style="font-weight:bold;">CATEGORIES</div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Food</span><span t-esc="fmt(props.data.categories.food)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Bar</span><span t-esc="fmt(props.data.categories.bar)"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 4px 0;"/>
+            <div style="font-weight:bold;">TIPS</div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Cash Tips</span><span t-esc="fmt(props.data.total_cash_tips)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Card Tips</span><span t-esc="fmt(props.data.total_card_tips)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                <span>Total Tips</span><span t-esc="fmt(props.data.total_tips)"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 4px 0;"/>
+            <div style="font-weight:bold;">PAYOUT</div>
+            <t t-if="props.data.payout.eligible_for_pool">
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Pool (<t t-esc="props.data.payout.pool_pct"/>%)</span>
+                    <span t-esc="fmt(props.data.payout.pool_contribution)"/>
+                </div>
+            </t>
+            <t t-else="">
+                <div style="font-style:italic;">Pool: not eligible (food &lt;
+                    <t t-esc="fmt(props.data.payout.threshold)"/>)
+                </div>
+            </t>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Cash Sales</span><span t-esc="fmt(props.data.payout.cash_sales)"/>
+            </div>
+            <div t-if="props.data.payout.tip_pool_shortfall &gt; 0"
+                 style="display:flex; justify-content:space-between;">
+                <span>Tip Pool Shortfall</span>
+                <span t-esc="fmt(props.data.payout.tip_pool_shortfall)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                <span>Cash Due to Till</span>
+                <span t-esc="fmt(props.data.payout.total_cash_due_to_till)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Cash Tips Kept</span>
+                <span t-esc="fmt(props.data.payout.cash_tips_kept)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Card Tips Payroll</span>
+                <span t-esc="fmt(props.data.payout.card_tips_to_payroll)"/>
+            </div>
+
+        </div>
+    </t>
+
+</templates>

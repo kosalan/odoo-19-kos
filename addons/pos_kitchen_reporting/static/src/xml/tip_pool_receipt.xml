@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.TipPoolReceipt">
+        <div class="pos-receipt" style="font-family: monospace; width: 300px; padding: 4px;">
+            <div style="text-align:center; font-size:10px; color:#666;">
+                <t t-esc="new Date().toLocaleString()"/>
+            </div>
+            <div style="text-align:center; font-weight:bold; font-size:14px;">TIP POOL REPORT</div>
+            <div style="text-align:center; font-size:11px;">
+                <t t-esc="props.data.period_start"/> → <t t-esc="props.data.period_end"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="text-align:center; font-weight:bold; font-size:13px;">
+                Pool Total: <t t-esc="fmt(props.data.total_pool)"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="font-weight:bold;">CONTRIBUTORS</div>
+            <t t-if="!props.data.contributors.length">
+                <div style="font-style:italic;">None</div>
+            </t>
+            <t t-foreach="props.data.contributors" t-as="c" t-key="c.employee_id || c.employee_name">
+                <div style="display:flex; justify-content:space-between;">
+                    <span t-esc="c.employee_name"/>
+                    <span t-esc="fmt(c.contribution)"/>
+                </div>
+                <div style="font-size:10px; color:#555;">
+                    Food: <t t-esc="fmt(c.food_sales)"/>
+                </div>
+            </t>
+
+            <div t-if="props.data.daily_contributions and props.data.daily_contributions.length"
+                 style="margin-top:4px;">
+                <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+                <div style="font-weight:bold;">DAILY BREAKDOWN</div>
+                <t t-foreach="props.data.daily_contributions" t-as="d"
+                   t-key="d.date + '_' + d.employee_id">
+                    <div style="display:flex; justify-content:space-between; font-size:11px;">
+                        <span><t t-esc="d.date"/> <t t-esc="d.employee_name"/></span>
+                        <span t-esc="fmt(d.contribution)"/>
+                    </div>
+                </t>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="font-weight:bold;">BACK STAFF DISTRIBUTION</div>
+            <t t-if="!props.data.back_staff.length">
+                <div style="font-style:italic;">No back staff configured</div>
+            </t>
+            <t t-foreach="props.data.back_staff" t-as="b" t-key="b.employee_id">
+                <div style="display:flex; justify-content:space-between;">
+                    <span><t t-esc="b.employee_name"/> (<t t-esc="b.hours"/>h)</span>
+                    <span t-esc="fmt(b.amount)"/>
+                </div>
+            </t>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                <span>Total Hours: <t t-esc="props.data.total_back_hours"/>h</span>
+                <span><t t-esc="fmt(props.data.total_pool)"/></span>
+            </div>
+        </div>
+    </t>
+
+</templates>

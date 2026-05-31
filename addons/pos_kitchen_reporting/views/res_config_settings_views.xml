@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_pos" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.pos.kitchen.reporting</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="point_of_sale.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@id='pos_preparation_section']" position="after">
+                <block title="Tip Pool" id="tip_pool_settings">
+                    <setting id="tip_pool_pct_setting"
+                             string="Tip Pool %"
+                             help="Percentage of food sales contributed to the tip pool.">
+                        <field name="tip_pool_pct"/>
+                    </setting>
+                    <setting id="tip_pool_threshold_setting"
+                             string="Pool Threshold"
+                             help="Minimum food sales before a server contributes.">
+                        <field name="tip_pool_threshold"/>
+                    </setting>
+                    <setting id="tip_pool_food_setting"
+                             string="Food Categories"
+                             help="Sales in these categories count as Food.">
+                        <field name="tip_pool_food_category_ids" widget="many2many_tags"/>
+                    </setting>
+                    <setting id="tip_pool_bar_setting"
+                             string="Bar Categories"
+                             help="Sales in these categories count as Bar.">
+                        <field name="tip_pool_bar_category_ids" widget="many2many_tags"/>
+                    </setting>
+                    <setting id="tip_pool_back_staff_setting"
+                             string="Back Staff Department"
+                             help="Employees in this department share the pool.">
+                        <field name="tip_pool_back_staff_department_id"/>
+                    </setting>
+                    <setting id="auto_print_close_setting"
+                             string="Auto-print Reports on Session Close"
+                             help="Print each employee's report automatically when the manager closes the session.">
+                        <field name="auto_print_reports_on_close"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

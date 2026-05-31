@@ -80,6 +80,42 @@
                 </t>
             </div>
 
+            <!-- PIN dialog -->
+            <div t-if="state.pinDialog" class="att-pin-overlay" t-on-click="closePinDialog">
+                <div class="att-pin-card" t-on-click.stop="">
+                    <div class="att-pin-header">
+                        <div class="att-pin-name" t-esc="state.pinDialog.employee.name"/>
+                        <div class="att-pin-sub">
+                            <t t-if="state.pinDialog.employee.is_checked_in">Check Out</t>
+                            <t t-else="">Check In</t>
+                        </div>
+                    </div>
+
+                    <div class="att-pin-display">
+                        <t t-foreach="[0,1,2,3]" t-as="i" t-key="i">
+                            <span class="att-pin-dot"
+                                  t-att-class="{'filled': i &lt; state.pinDialog.pin.length}"/>
+                        </t>
+                    </div>
+
+                    <div t-if="state.pinDialog.error" class="att-pin-error"
+                         t-esc="state.pinDialog.error"/>
+
+                    <div class="att-pin-pad">
+                        <t t-foreach="['1','2','3','4','5','6','7','8','9']" t-as="k" t-key="k">
+                            <button class="att-pin-key" t-on-click="() => this.onPinKey(k)" t-esc="k"/>
+                        </t>
+                        <button class="att-pin-key att-pin-key-action"
+                                t-on-click="() => this.onPinKey('clear')">C</button>
+                        <button class="att-pin-key" t-on-click="() => this.onPinKey('0')">0</button>
+                        <button class="att-pin-key att-pin-key-ok"
+                                t-on-click="() => this.onPinKey('ok')">OK</button>
+                    </div>
+
+                    <button class="att-pin-cancel" t-on-click="closePinDialog">Cancel</button>
+                </div>
+            </div>
+
         </div>
     </t>
 

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.TipPoolView">
+        <div class="pool-wrap">
+
+            <!-- Date range + print -->
+            <div class="pool-controls">
+                <button class="pool-quick" t-on-click="() => this.quickRange('today')">Today</button>
+                <button class="pool-quick" t-on-click="() => this.quickRange('week')">Last 7 days</button>
+                <button class="pool-quick" t-on-click="() => this.quickRange('month')">This Month</button>
+                <span class="pool-from">From</span>
+                <input type="date" t-model="state.startDate" t-on-change="() => this.load()"/>
+                <span class="pool-to">To</span>
+                <input type="date" t-model="state.endDate" t-on-change="() => this.load()"/>
+                <div class="pool-spacer"/>
+                <button class="pool-print-btn"
+                        t-att-class="{ 'is-printing': state.printing }"
+                        t-on-click="() => this.print()">
+                    <i class="fa fa-print"/>
+                    <t t-if="state.printing"> Printing…</t>
+                    <t t-else=""> Print</t>
+                </button>
+            </div>
+
+            <!-- Last settlement notice -->
+            <div t-if="state.lastSettlement" class="pool-last">
+                <i class="fa fa-info-circle"/>
+                Last distributed: <b><t t-esc="state.lastSettlement.name"/></b>
+                on <t t-esc="state.lastSettlement.distributed_on"/>
+                (<t t-esc="fmt(state.lastSettlement.total_pool)"/>)
+            </div>
+
+            <div t-if="state.loading" class="rep-loading">
+                <i class="fa fa-spinner fa-spin fa-2x"/>
+            </div>
+
+            <div t-elif="state.data" class="pool-content">
+
+                <!-- Pool total card -->
+                <div class="pool-summary">
+                    <div class="pool-summary-label">Tip Pool Total</div>
+                    <div class="pool-summary-value" t-esc="fmt(state.data.total_pool)"/>
+                    <div class="pool-summary-sub">
+                        <t t-esc="state.data.contributors.length"/> contributing server(s),
+                        <t t-esc="state.data.back_staff.length"/> eligible back staff
+                    </div>
+                </div>
+
+                <!-- Contributors -->
+                <div class="pool-section">
+                    <h3>Contributors</h3>
+                    <table t-if="state.data.contributors.length" class="mgr-table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th class="num">Food Sales</th>
+                                <th class="num">Contribution</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="state.data.contributors" t-as="c" t-key="c.employee_id || c.employee_name">
+                                <tr>
+                                    <td t-esc="c.employee_name"/>
+                                    <td class="num" t-esc="fmt(c.food_sales)"/>
+                                    <td class="num" t-esc="fmt(c.contribution)"/>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                    <div t-else="" class="rep-muted">No contributors in this period.</div>
+                </div>
+
+                <!-- Daily contributions breakdown -->
+                <div class="pool-section">
+                    <h3>Daily Contributions</h3>
+                    <table t-if="state.data.daily_contributions and state.data.daily_contributions.length"
+                           class="mgr-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Employee</th>
+                                <th class="num">Food Sales</th>
+                                <th class="num">Contribution</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="state.data.daily_contributions" t-as="d"
+                               t-key="d.date + '_' + d.employee_id">
+                                <tr>
+                                    <td t-esc="d.date"/>
+                                    <td t-esc="d.employee_name"/>
+                                    <td class="num" t-esc="fmt(d.food_sales)"/>
+                                    <td class="num" t-esc="fmt(d.contribution)"/>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                    <div t-else="" class="rep-muted">
+                        No daily contributions in this period.
+                    </div>
+                </div>
+
+                <!-- Back staff distribution -->
+                <div class="pool-section">
+                    <h3>Back Staff Distribution</h3>
+                    <table t-if="state.data.back_staff.length" class="mgr-table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th class="num">Hours</th>
+                                <th class="num">Share %</th>
+                                <th class="num">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="state.data.back_staff" t-as="b" t-key="b.employee_id">
+                                <tr>
+                                    <td t-esc="b.employee_name"/>
+                                    <td class="num" t-esc="b.hours"/>
+                                    <td class="num"><t t-esc="b.share_pct"/>%</td>
+                                    <td class="num" t-esc="fmt(b.amount)"/>
+                                </tr>
+                            </t>
+                            <tr class="pool-totals">
+                                <td>Total</td>
+                                <td class="num" t-esc="state.data.total_back_hours"/>
+                                <td class="num">100%</td>
+                                <td class="num" t-esc="fmt(state.data.total_pool)"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div t-else="" class="rep-muted">
+                        No back staff configured. Set the department in
+                        Settings → Point of Sale → Tip Pool.
+                    </div>
+                </div>
+
+                <!-- Create settlement -->
+                <div class="pool-section">
+                    <h3>Create Settlement Snapshot</h3>
+                    <p class="rep-muted">
+                        Freezes this period's distribution for payroll. Edit and finalize in the backend.
+                    </p>
+                    <div class="pool-create">
+                        <input type="text" placeholder="Settlement name (e.g. Tip Pool — Jan 2026)"
+                               t-model="state.settlementName"/>
+                        <button class="btn-rep btn-rep-print"
+                                t-on-click="() => this.createSettlement()"
+                                t-att-disabled="state.creating">
+                            Create Draft
+                        </button>
+                    </div>
+                    <div t-if="state.createdMsg" class="pool-msg"
+                         t-att-class="state.createdMsg.type"
+                         t-esc="state.createdMsg.text"/>
+                </div>
+
+            </div>
+        </div>
+    </t>
+
+</templates>

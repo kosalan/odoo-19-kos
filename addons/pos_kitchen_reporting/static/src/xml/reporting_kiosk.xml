@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.ReportingKiosk">
+        <div class="rep-overlay">
+
+            <!-- Header -->
+            <div class="rep-header">
+                <button class="rep-back-btn" t-on-click="() => this.props.onClose()">
+                    <i class="fa fa-arrow-left"/> Back to POS
+                </button>
+                <h2 class="rep-title">
+                    <t t-if="state.screen === 'picker'">Select Employee</t>
+                    <t t-elif="state.screen === 'pin'">Enter PIN</t>
+                    <t t-elif="state.screen === 'report'">My Report</t>
+                    <t t-elif="state.screen === 'manager'">Manager Dashboard</t>
+                </h2>
+                <div class="rep-header-spacer"/>
+            </div>
+
+            <!-- Loading -->
+            <div t-if="state.loading" class="rep-loading">
+                <i class="fa fa-spinner fa-spin fa-2x"/>
+            </div>
+
+            <!-- Employee picker (list style) -->
+            <div t-elif="state.screen === 'picker'" class="rep-picker-list-wrap">
+                <div t-if="!state.employees.length" class="rep-empty">
+                    No employees available.
+                </div>
+                <div t-else="" class="rep-picker-list">
+                    <t t-foreach="state.employees" t-as="emp" t-key="emp.id">
+                        <button class="rep-emp-row"
+                                t-on-click="() => this.onEmployeeClick(emp)">
+                            <div class="rep-row-avatar">
+                                <t t-if="emp.image">
+                                    <img class="rep-row-img"
+                                         t-att-src="'data:image/png;base64,' + emp.image"/>
+                                </t>
+                                <t t-else="">
+                                    <div class="rep-row-initial"
+                                         t-att-style="'background-color:' + (emp.is_manager ? '#28a745' : '#875a7b')">
+                                        <t t-esc="emp.name[0].toUpperCase()"/>
+                                    </div>
+                                </t>
+                            </div>
+                            <div class="rep-row-name" t-esc="emp.name"/>
+                            <div class="rep-row-badges">
+                                <span t-if="emp.is_manager" class="rep-badge rep-badge-mgr">Manager</span>
+                                <span t-if="emp.is_checked_in" class="rep-badge rep-badge-in">On site</span>
+                            </div>
+                            <i class="fa fa-chevron-right rep-row-arrow"/>
+                        </button>
+                    </t>
+                </div>
+            </div>
+
+            <!-- PIN entry (4-digit) -->
+            <div t-elif="state.screen === 'pin'" class="rep-pin-wrap">
+                <div class="rep-pin-card">
+                    <div class="rep-pin-name" t-esc="state.selected.name"/>
+                    <div class="rep-pin-sub">Enter 4-digit PIN</div>
+                    <div class="rep-pin-display">
+                        <t t-foreach="[0,1,2,3]" t-as="i" t-key="i">
+                            <span class="rep-pin-dot"
+                                  t-att-class="{'filled': i &lt; state.pin.length}"/>
+                        </t>
+                    </div>
+                    <div t-if="state.pinError" class="rep-pin-error"
+                         t-esc="state.pinError"/>
+                    <div class="rep-pin-pad">
+                        <t t-foreach="['1','2','3','4','5','6','7','8','9']" t-as="k" t-key="k">
+                            <button class="rep-pin-key" t-on-click="() => this.onPinKey(k)" t-esc="k"/>
+                        </t>
+                        <button class="rep-pin-key rep-pin-key-clear"
+                                t-on-click="() => this.onPinKey('clear')">C</button>
+                        <button class="rep-pin-key" t-on-click="() => this.onPinKey('0')">0</button>
+                        <button class="rep-pin-key rep-pin-key-back"
+                                t-on-click="() => this.onPinKey('back')">⌫</button>
+                    </div>
+                    <button class="rep-pin-cancel" t-on-click="() => this.backToPicker()">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Employee report -->
+            <EmployeeReport t-elif="state.screen === 'report'"
+                            data="state.reportData"
+                            onBack="() => this.backToPicker()"/>
+
+            <!-- Manager dashboard -->
+            <ManagerDashboard t-elif="state.screen === 'manager'"
+                              onBack="() => this.backToPicker()"/>
+
+        </div>
+    </t>
+
+</templates>

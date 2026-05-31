@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.EmployeeReport">
+        <div class="rep-report-wrap">
+            <div class="rep-report">
+
+                <!-- Title -->
+                <div class="rep-report-header">
+                    <div class="rep-printed-at">
+                        Generated: <t t-esc="generatedAt"/>
+                    </div>
+                    <h2 t-esc="props.data.employee.name"/>
+                    <div t-if="props.data.employee.job_title or props.data.employee.department"
+                         class="rep-report-sub-role">
+                        <t t-esc="props.data.employee.job_title or props.data.employee.department"/>
+                    </div>
+                    <div class="rep-report-sub">
+                        Session: <span t-esc="props.data.session.name"/>
+                    </div>
+                </div>
+
+                <!-- Time worked -->
+                <div class="rep-section">
+                    <div class="rep-section-title">Time Worked</div>
+                    <div class="rep-kv">
+                        <span>Total Worked</span>
+                        <span t-esc="minutesToHm(props.data.attendance.total_worked_minutes)"/>
+                    </div>
+                    <div class="rep-kv">
+                        <span>Total Break</span>
+                        <span t-esc="minutesToHm(props.data.attendance.total_break_minutes)"/>
+                    </div>
+                    <div t-if="props.data.attendance.punches.length" class="rep-punches">
+                        <div class="rep-punches-title">Punches</div>
+                        <t t-foreach="props.data.attendance.punches" t-as="p" t-key="p_index">
+                            <div class="rep-punch-row">
+                                <span class="rep-punch-in">
+                                    <i class="fa fa-sign-in"/> <t t-esc="formatDt(p.check_in)"/>
+                                </span>
+                                <span class="rep-punch-out">
+                                    <i class="fa fa-sign-out"/> <t t-esc="formatDt(p.check_out)"/>
+                                </span>
+                            </div>
+                        </t>
+                    </div>
+                </div>
+
+                <!-- Sales by payment method -->
+                <div class="rep-section">
+                    <div class="rep-section-title">Sales</div>
+                    <t t-foreach="props.data.sales_by_method" t-as="row" t-key="row.method">
+                        <div class="rep-kv">
+                            <span t-esc="row.method"/>
+                            <span t-esc="fmt(row.amount)"/>
+                        </div>
+                    </t>
+                    <div class="rep-kv rep-kv-total">
+                        <span>Total Sales</span>
+                        <span t-esc="fmt(props.data.total_sales)"/>
+                    </div>
+                </div>
+
+                <!-- Categories -->
+                <div class="rep-section">
+                    <div class="rep-section-title">Categories</div>
+                    <div class="rep-kv">
+                        <span>Food</span>
+                        <span t-esc="fmt(props.data.categories.food)"/>
+                    </div>
+                    <div class="rep-kv">
+                        <span>Bar</span>
+                        <span t-esc="fmt(props.data.categories.bar)"/>
+                    </div>
+                </div>
+
+                <!-- Tips -->
+                <div class="rep-section">
+                    <div class="rep-section-title">Tips</div>
+                    <div class="rep-kv">
+                        <span>Cash Tips</span>
+                        <span t-esc="fmt(props.data.total_cash_tips)"/>
+                    </div>
+                    <div class="rep-kv">
+                        <span>Card Tips</span>
+                        <span t-esc="fmt(props.data.total_card_tips)"/>
+                    </div>
+                    <div class="rep-kv rep-kv-total">
+                        <span>Total Tips</span>
+                        <span t-esc="fmt(props.data.total_tips)"/>
+                    </div>
+                </div>
+
+                <!-- Payout -->
+                <div class="rep-section rep-payout">
+                    <div class="rep-section-title">Payout</div>
+
+                    <t t-if="props.data.payout.eligible_for_pool">
+                        <div class="rep-kv">
+                            <span>Pool Contribution (<t t-esc="props.data.payout.pool_pct"/>% of food)</span>
+                            <span t-esc="fmt(props.data.payout.pool_contribution)"/>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="rep-kv rep-muted">
+                            <span>Not eligible for pool</span>
+                            <span>Food &lt; <t t-esc="fmt(props.data.payout.threshold)"/></span>
+                        </div>
+                    </t>
+
+                    <hr/>
+                    <div class="rep-kv">
+                        <span>Cash Sales (to till)</span>
+                        <span t-esc="fmt(props.data.payout.cash_sales)"/>
+                    </div>
+                    <div t-if="props.data.payout.tip_pool_shortfall &gt; 0" class="rep-kv">
+                        <span>Tip Pool Shortfall (cash)</span>
+                        <span t-esc="fmt(props.data.payout.tip_pool_shortfall)"/>
+                    </div>
+                    <div class="rep-kv rep-kv-due">
+                        <span>Total Cash Due to Till</span>
+                        <span t-esc="fmt(props.data.payout.total_cash_due_to_till)"/>
+                    </div>
+
+                    <hr/>
+                    <div class="rep-kv rep-kv-keep">
+                        <span>Cash Tips You Keep</span>
+                        <span t-esc="fmt(props.data.payout.cash_tips_kept)"/>
+                    </div>
+                    <div class="rep-kv rep-kv-payroll">
+                        <span>Card Tips → Payroll</span>
+                        <span t-esc="fmt(props.data.payout.card_tips_to_payroll)"/>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="rep-actions">
+                    <button class="btn-rep btn-rep-back" t-on-click="() => this.props.onBack()">Back</button>
+                    <button class="btn-rep btn-rep-print"
+                            t-att-class="{ 'is-printing': state.printing }"
+                            t-on-click="() => this.print()">
+                        <t t-if="state.printing">Printing…</t>
+                        <t t-else="">Print</t>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

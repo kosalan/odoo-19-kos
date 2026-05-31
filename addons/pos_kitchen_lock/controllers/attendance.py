@@ -30,13 +30,20 @@ class PosAttendanceController(http.Controller):
         return result
 
     @http.route("/pos/attendance/action", type="jsonrpc", auth="user")
-    def attendance_action(self, employee_id):
-        employee = request.env["hr.employee"].browse(int(employee_id))
+    def attendance_action(self, employee_id, pin=None):
+        employee = request.env["hr.employee"].sudo().browse(int(employee_id))
         if not employee.exists():
             return {"error": "Employee not found"}
 
+        use_pin = request.env.company.attendance_kiosk_use_pin
+        if use_pin:
+            if not pin:
+                return {"error": "pin_required"}
+            if employee.pin != pin:
+                return {"error": "wrong_pin"}
+
         now = fields.Datetime.now()
-        open_att = request.env["hr.attendance"].search(
+        open_att = request.env["hr.attendance"].sudo().search(
             [("employee_id", "=", employee.id), ("check_out", "=", False)], limit=1
         )
 
@@ -44,9 +51,15 @@ class PosAttendanceController(http.Controller):
             open_att.write({"check_out": now})
             action = "check_out"
         else:
-            request.env["hr.attendance"].create(
+            request.env["hr.attendance"].sudo().create(
                 {"employee_id": employee.id, "check_in": now}
             )
             action = "check_in"
 
         return {"action": action, "employee_name": employee.name}
+
+    @http.route("/pos/attendance/config", type="jsonrpc", auth="user")
+    def get_config(self):
+        return {
+            "use_pin": request.env.company.attendance_kiosk_use_pin,
+        }

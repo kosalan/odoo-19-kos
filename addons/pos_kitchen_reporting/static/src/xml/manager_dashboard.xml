@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.ManagerDashboard">
+        <div class="mgr-wrap">
+
+            <!-- Sub-tabs -->
+            <div class="mgr-tabs">
+                <button class="mgr-tab"
+                        t-att-class="{active: state.tab === 'reports'}"
+                        t-on-click="() => this.state.tab = 'reports'">
+                    Employee Reports
+                </button>
+                <button class="mgr-tab"
+                        t-att-class="{active: state.tab === 'tippool'}"
+                        t-on-click="() => this.state.tab = 'tippool'">
+                    Tip Pool
+                </button>
+                <div class="mgr-tabs-spacer"/>
+                <button class="mgr-back" t-on-click="() => this.props.onBack()">← Switch User</button>
+            </div>
+
+            <!-- Loading -->
+            <div t-if="state.loading" class="rep-loading">
+                <i class="fa fa-spinner fa-spin fa-2x"/>
+            </div>
+
+            <!-- Selected employee report (overlay) -->
+            <div t-elif="state.selectedReport" class="mgr-report-modal">
+                <EmployeeReport data="state.selectedReport"
+                                onBack="() => this.closeReport()"/>
+            </div>
+
+            <!-- Employee Reports tab -->
+            <div t-elif="state.tab === 'reports'" class="mgr-reports">
+                <div t-if="state.session" class="mgr-session-info">
+                    <b>Session:</b> <t t-esc="state.session.name"/>
+                    <span class="mgr-muted"> · Opened <t t-esc="state.session.opened_at"/></span>
+                </div>
+                <div t-if="!state.employees.length" class="rep-empty">
+                    No employee activity in this session yet.
+                </div>
+                <table t-else="" class="mgr-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th class="num">Orders</th>
+                            <th class="num">Sales</th>
+                            <th class="num">Tips</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <t t-foreach="state.employees" t-as="emp" t-key="emp.employee_id">
+                            <tr>
+                                <td t-esc="emp.employee_name"/>
+                                <td class="num" t-esc="emp.orders"/>
+                                <td class="num" t-esc="fmt(emp.sales)"/>
+                                <td class="num" t-esc="fmt(emp.tips)"/>
+                                <td>
+                                    <button class="mgr-row-btn" t-on-click="() => this.openReport(emp)">
+                                        View
+                                    </button>
+                                </td>
+                            </tr>
+                        </t>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Tip Pool tab -->
+            <TipPoolView t-elif="state.tab === 'tippool'"/>
+
+        </div>
+    </t>
+
+</templates>

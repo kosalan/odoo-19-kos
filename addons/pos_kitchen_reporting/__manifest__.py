@@ -1,0 +1,45 @@
+{
+    'name': 'POS Kitchen Reporting',
+    'version': '19.0.1.0.0',
+    'author': 'Kosalan Balarajah',
+    'category': 'Point of Sale',
+    'summary': 'Per-employee session reports, tip pool calculation, and monthly distribution',
+    'description': """
+        Lets waitresses print a per-session report (sales, tips, payout to till,
+        cash tips kept, card tips to payroll). Managers can view all reports,
+        manage the tip pool, and freeze monthly distributions to back-of-house
+        staff based on hours worked.
+    """,
+    'depends': [
+        'point_of_sale',
+        'pos_restaurant',
+        'hr_attendance',
+        'pos_kitchen_lock',
+    ],
+    'data': [
+        'security/ir.model.access.csv',
+        'views/res_config_settings_views.xml',
+        'views/tip_pool_settlement_views.xml',
+    ],
+    'assets': {
+        'point_of_sale._assets_pos': [
+            'pos_kitchen_reporting/static/src/css/reporting.css',
+            'pos_kitchen_reporting/static/src/js/server_report_receipt.js',
+            'pos_kitchen_reporting/static/src/js/tip_pool_receipt.js',
+            'pos_kitchen_reporting/static/src/js/employee_report.js',
+            'pos_kitchen_reporting/static/src/js/manager_dashboard.js',
+            'pos_kitchen_reporting/static/src/js/tip_pool_view.js',
+            'pos_kitchen_reporting/static/src/js/reporting_kiosk.js',
+            'pos_kitchen_reporting/static/src/xml/server_report_receipt.xml',
+            'pos_kitchen_reporting/static/src/xml/tip_pool_receipt.xml',
+            'pos_kitchen_reporting/static/src/xml/reporting_kiosk.xml',
+            'pos_kitchen_reporting/static/src/xml/employee_report.xml',
+            'pos_kitchen_reporting/static/src/xml/manager_dashboard.xml',
+            'pos_kitchen_reporting/static/src/xml/tip_pool_view.xml',
+            'pos_kitchen_reporting/static/src/xml/integration.xml',
+        ],
+    },
+    'license': 'LGPL-3',
+    'installable': True,
+    'auto_install': False,
+}

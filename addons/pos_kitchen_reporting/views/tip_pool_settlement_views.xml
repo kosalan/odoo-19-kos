@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_tip_pool_settlement_list" model="ir.ui.view">
+        <field name="name">pos.tip.pool.settlement.list</field>
+        <field name="model">pos.tip.pool.settlement</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="period_start"/>
+                <field name="period_end"/>
+                <field name="total_pool" widget="monetary"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-success="state == 'distributed'"/>
+                <field name="distributed_on"/>
+                <field name="distributed_by"/>
+                <field name="currency_id" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_tip_pool_settlement_form" model="ir.ui.view">
+        <field name="name">pos.tip.pool.settlement.form</field>
+        <field name="model">pos.tip.pool.settlement</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_distribute" type="object" string="Distribute"
+                            class="btn-primary" invisible="state != 'draft'"
+                            confirm="Freeze this settlement? After distribution, the amounts cannot be edited."/>
+                    <button name="action_reset_to_draft" type="object" string="Reset to Draft"
+                            invisible="state != 'distributed'"
+                            groups="point_of_sale.group_pos_manager"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,distributed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Tip Pool — Jan 2026"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="period_start"/>
+                            <field name="period_end"/>
+                        </group>
+                        <group>
+                            <field name="total_pool" widget="monetary"/>
+                            <field name="distributed_on" readonly="1"/>
+                            <field name="distributed_by" readonly="1"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Distributions">
+                            <field name="line_ids" readonly="state == 'distributed'">
+                                <list editable="bottom">
+                                    <field name="employee_id"/>
+                                    <field name="hours_worked"/>
+                                    <field name="share_pct"/>
+                                    <field name="amount" widget="monetary"/>
+                                    <field name="currency_id" column_invisible="True"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_tip_pool_settlement" model="ir.actions.act_window">
+        <field name="name">Tip Pool Settlements</field>
+        <field name="res_model">pos.tip.pool.settlement</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_tip_pool_settlement"
+              name="Tip Pool Settlements"
+              parent="point_of_sale.menu_point_root"
+              action="action_tip_pool_settlement"
+              sequence="50"/>
+
+</odoo>
