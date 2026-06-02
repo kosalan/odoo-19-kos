@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.AttendanceReportReceipt">
+        <div class="pos-receipt" style="font-family: monospace; width: 300px; padding: 4px;">
+            <div style="text-align:center; font-size:10px; color:#666;">
+                <t t-esc="new Date().toLocaleString()"/>
+            </div>
+            <div style="text-align:center; font-weight:bold; font-size:14px;">ATTENDANCE REPORT</div>
+            <div style="text-align:center; font-size:11px;">
+                <t t-esc="props.data.period_start"/> → <t t-esc="props.data.period_end"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+
+            <t t-if="!props.data.employees.length">
+                <div style="font-style:italic;">No records.</div>
+            </t>
+
+            <t t-foreach="props.data.employees" t-as="emp" t-key="emp.employee_id">
+                <div style="font-weight:bold; margin-top:6px;">
+                    <t t-esc="emp.employee_name"/>
+                </div>
+                <div t-if="emp.department" style="font-size:10px; color:#555;">
+                    <t t-esc="emp.department"/>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Worked</span>
+                    <span t-esc="minutesToHm(emp.total_worked_minutes)"/>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Break</span>
+                    <span t-esc="minutesToHm(emp.total_break_minutes)"/>
+                </div>
+                <t t-foreach="emp.punches" t-as="p" t-key="p_index">
+                    <div style="font-size:10px; padding-left:4px;">
+                        In:&#160;<t t-esc="formatDt(p.check_in)"/>
+                    </div>
+                    <div style="font-size:10px; padding-left:4px;">
+                        Out: <t t-esc="formatDt(p.check_out)"/>
+                    </div>
+                </t>
+                <div style="border-top: 1px dashed #ccc; margin: 4px 0;"/>
+            </t>
+        </div>
+    </t>
+
+</templates>

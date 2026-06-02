@@ -4,6 +4,7 @@ import { Component, useState, onMounted } from "@odoo/owl";
 import { rpc } from "@web/core/network/rpc";
 import { EmployeeReport } from "@pos_kitchen_reporting/js/employee_report";
 import { TipPoolView } from "@pos_kitchen_reporting/js/tip_pool_view";
+import { AttendanceReport } from "@pos_kitchen_reporting/js/attendance_report";
 
 function todayISO() {
     const d = new Date();
@@ -25,7 +26,7 @@ function startOfMonthISO() {
 export class ManagerDashboard extends Component {
     static template = "pos_kitchen_reporting.ManagerDashboard";
     static props = { onBack: Function };
-    static components = { EmployeeReport, TipPoolView };
+    static components = { EmployeeReport, TipPoolView, AttendanceReport };
 
     setup() {
         this.state = useState({

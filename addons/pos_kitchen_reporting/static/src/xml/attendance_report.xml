@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.AttendanceReport">
+        <div class="pool-wrap">
+
+            <!-- Date range + filter + print -->
+            <div class="pool-controls">
+                <button class="pool-quick" t-on-click="() => this.quickRange('today')">Today</button>
+                <button class="pool-quick" t-on-click="() => this.quickRange('week')">Last 7</button>
+                <button class="pool-quick" t-on-click="() => this.quickRange('30d')">Last 30</button>
+                <button class="pool-quick" t-on-click="() => this.quickRange('month')">This Month</button>
+                <span class="pool-from">From</span>
+                <input type="date" t-model="state.startDate" t-on-change="() => this.load()"/>
+                <span class="pool-to">To</span>
+                <input type="date" t-model="state.endDate" t-on-change="() => this.load()"/>
+                <input type="text" class="mgr-name-filter"
+                       placeholder="Filter by name…"
+                       t-model="state.nameFilter"
+                       t-on-input="() => this.load()"/>
+                <button class="pool-print-btn"
+                        t-att-class="{ 'is-printing': state.printing }"
+                        t-on-click="() => this.print()">
+                    <i class="fa fa-print"/>
+                    <t t-if="state.printing"> Printing…</t>
+                    <t t-else=""> Print</t>
+                </button>
+            </div>
+
+            <div t-if="state.loading" class="rep-loading">
+                <i class="fa fa-spinner fa-spin fa-2x"/>
+            </div>
+
+            <div t-elif="state.data" class="pool-content">
+                <div t-if="!state.data.employees.length" class="rep-empty">
+                    No attendance records in this period.
+                </div>
+
+                <table t-else="" class="mgr-table att-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Employee</th>
+                            <th>Department</th>
+                            <th class="num">Worked</th>
+                            <th class="num">Break</th>
+                            <th class="num">Punches</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <t t-foreach="state.data.employees" t-as="emp" t-key="emp.employee_id">
+                            <tr class="att-row" t-on-click="() => this.toggleExpand(emp.employee_id)">
+                                <td class="att-toggle">
+                                    <i t-att-class="this.isExpanded(emp.employee_id)
+                                                    ? 'fa fa-caret-down'
+                                                    : 'fa fa-caret-right'"/>
+                                </td>
+                                <td t-esc="emp.employee_name"/>
+                                <td class="mgr-muted" t-esc="emp.department || '—'"/>
+                                <td class="num" t-esc="minutesToHm(emp.total_worked_minutes)"/>
+                                <td class="num mgr-muted" t-esc="minutesToHm(emp.total_break_minutes)"/>
+                                <td class="num" t-esc="emp.punches.length"/>
+                            </tr>
+                            <tr t-if="this.isExpanded(emp.employee_id)" class="att-detail-row">
+                                <td colspan="6">
+                                    <table class="att-punch-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Check In</th>
+                                                <th>Check Out</th>
+                                                <th class="num">Duration</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-foreach="emp.punches" t-as="p" t-key="p_index">
+                                                <tr>
+                                                    <td t-esc="formatDt(p.check_in)"/>
+                                                    <td t-esc="formatDt(p.check_out)"/>
+                                                    <td class="num" t-esc="minutesToHm(p.minutes)"/>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        </t>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </t>
+
+</templates>

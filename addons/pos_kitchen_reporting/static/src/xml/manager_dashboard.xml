@@ -16,6 +16,11 @@
                         t-on-click="() => this.state.tab = 'tippool'">
                     Tip Pool
                 </button>
+                <button class="mgr-tab"
+                        t-att-class="{active: state.tab === 'attendance'}"
+                        t-on-click="() => this.state.tab = 'attendance'">
+                    Attendance
+                </button>
                 <div class="mgr-tabs-spacer"/>
                 <button class="mgr-back" t-on-click="() => this.props.onBack()">← Switch User</button>
             </div>
@@ -99,6 +104,9 @@
 
             <!-- Tip Pool tab -->
             <TipPoolView t-elif="state.tab === 'tippool'"/>
+
+            <!-- Attendance tab -->
+            <AttendanceReport t-elif="state.tab === 'attendance'"/>
 
         </div>
     </t>

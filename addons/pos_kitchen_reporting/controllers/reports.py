@@ -775,6 +775,83 @@ class PosReportingController(http.Controller):
 
         return _compute_employee_report(emp, session, request.env.company)
 
+    @http.route("/pos/reporting/attendance_summary", type="jsonrpc", auth="user")
+    def attendance_summary(self, start_date, end_date, name_filter=None):
+        """All employee punches in the date range, with worked/break totals."""
+        start = fields.Date.from_string(start_date)
+        end = fields.Date.from_string(end_date)
+        start_dt = datetime.combine(start, datetime.min.time())
+        end_dt = datetime.combine(end, datetime.max.time())
+        now = fields.Datetime.now()
+
+        atts = request.env["hr.attendance"].sudo().search(
+            [
+                ("check_in", "<=", end_dt),
+                "|",
+                ("check_out", ">=", start_dt),
+                ("check_out", "=", False),
+            ],
+            order="employee_id, check_in asc",
+        )
+
+        # Group by employee
+        emp_data = {}  # {emp_id: {employee, punches, intervals}}
+        for att in atts:
+            emp = att.employee_id
+            if not emp:
+                continue
+            ci = att.check_in
+            co = att.check_out or now
+            eff_in = max(ci, start_dt)
+            eff_out = min(co, end_dt)
+            emp_data.setdefault(
+                emp.id,
+                {
+                    "employee_id": emp.id,
+                    "employee_name": emp.name,
+                    "department": emp.department_id.name if emp.department_id else "",
+                    "job_title": emp.job_title or (emp.job_id.name if emp.job_id else ""),
+                    "punches": [],
+                    "_intervals": [],
+                },
+            )
+            worked = (eff_out - eff_in).total_seconds() / 60.0 if eff_out > eff_in else 0.0
+            emp_data[emp.id]["punches"].append(
+                {
+                    "check_in": fields.Datetime.to_string(att.check_in),
+                    "check_out": fields.Datetime.to_string(att.check_out)
+                    if att.check_out
+                    else None,
+                    "minutes": round(worked, 1),
+                }
+            )
+            if eff_out > eff_in:
+                emp_data[emp.id]["_intervals"].append((eff_in, eff_out))
+
+        # Compute totals
+        result = []
+        name_filter = (name_filter or "").strip().lower()
+        for emp_id, info in emp_data.items():
+            if name_filter and name_filter not in info["employee_name"].lower():
+                continue
+            intervals = info.pop("_intervals")
+            intervals.sort()
+            total_worked = sum((b - a).total_seconds() / 60.0 for a, b in intervals)
+            total_break = 0.0
+            for i in range(1, len(intervals)):
+                gap = (intervals[i][0] - intervals[i - 1][1]).total_seconds() / 60.0
+                if gap > 0:
+                    total_break += gap
+            info["total_worked_minutes"] = round(total_worked, 1)
+            info["total_break_minutes"] = round(total_break, 1)
+            result.append(info)
+        result.sort(key=lambda r: r["employee_name"])
+        return {
+            "period_start": fields.Date.to_string(start),
+            "period_end": fields.Date.to_string(end),
+            "employees": result,
+        }
+
     @http.route("/pos/reporting/range_employees", type="jsonrpc", auth="user")
     def range_employees(self, start_date, end_date, name_filter=None):
         """List employees with activity in the given date range, optional name filter.

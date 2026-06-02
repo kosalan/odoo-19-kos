@@ -469,6 +469,35 @@
     font-size: 13px;
 }
 
+/* ── Attendance table ──────────────────────────────────────────────────── */
+.att-table .att-row { cursor: pointer; }
+.att-table .att-row:hover { background: #faf6f9; }
+.att-table .att-toggle { width: 28px; color: #875a7b; }
+.att-detail-row td {
+    background: #faf6f9;
+    padding: 0;
+}
+.att-punch-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+.att-punch-table th {
+    background: transparent;
+    color: #888;
+    font-size: 11px;
+    padding: 6px 14px;
+    text-align: left;
+    text-transform: uppercase;
+}
+.att-punch-table th.num, .att-punch-table td.num { text-align: right; }
+.att-punch-table td {
+    padding: 4px 14px;
+    border-top: 1px dashed #e6e0e4;
+    font-size: 13px;
+    color: #1a1a2e;
+}
+
 .mgr-report-modal {
     position: absolute;
     inset: 0;
