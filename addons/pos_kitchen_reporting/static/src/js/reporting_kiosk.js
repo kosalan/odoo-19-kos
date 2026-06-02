@@ -107,6 +107,15 @@ export class ReportingKiosk extends Component {
         this.state.pinError = null;
         this.state.reportData = null;
     }
+
+    async refreshReport() {
+        if (!this.state.selected) {
+            return;
+        }
+        this.state.reportData = await rpc("/pos/reporting/my_report", {
+            employee_id: this.state.selected.id,
+        });
+    }
 }
 
 export class ReportingButton extends Component {

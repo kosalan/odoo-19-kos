@@ -85,7 +85,9 @@
             <!-- Employee report -->
             <EmployeeReport t-elif="state.screen === 'report'"
                             data="state.reportData"
-                            onBack="() => this.backToPicker()"/>
+                            isManager="false"
+                            onBack="() => this.backToPicker()"
+                            onRefresh.bind="refreshReport"/>
 
             <!-- Manager dashboard -->
             <ManagerDashboard t-elif="state.screen === 'manager'"

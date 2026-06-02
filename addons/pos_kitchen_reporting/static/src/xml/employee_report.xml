@@ -144,6 +144,45 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Clock-out warning -->
+            <div t-if="state.clockOutPrompt" class="rep-modal-backdrop">
+                <div class="rep-modal-card">
+                    <h3>Clock out required</h3>
+                    <p>You're still clocked in. Please clock out before printing your report.</p>
+                    <div class="rep-modal-actions">
+                        <button class="btn-rep btn-rep-back" t-on-click="() => this.cancelClockOut()">Cancel</button>
+                        <button class="btn-rep btn-rep-print" t-on-click="() => this.confirmClockOut()">Clock out &amp; print</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clock-out PIN -->
+            <div t-if="state.clockOutPinDialog" class="rep-modal-backdrop">
+                <div class="rep-pin-card">
+                    <div class="rep-pin-name" t-esc="props.data.employee.name"/>
+                    <div class="rep-pin-sub">Enter 4-digit PIN to clock out</div>
+                    <div class="rep-pin-display">
+                        <t t-foreach="[0,1,2,3]" t-as="i" t-key="i">
+                            <span class="rep-pin-dot"
+                                  t-att-class="{'filled': i &lt; state.clockOutPin.length}"/>
+                        </t>
+                    </div>
+                    <div t-if="state.clockOutError" class="rep-pin-error"
+                         t-esc="state.clockOutError"/>
+                    <div class="rep-pin-pad">
+                        <t t-foreach="['1','2','3','4','5','6','7','8','9']" t-as="k" t-key="k">
+                            <button class="rep-pin-key" t-on-click="() => this.onClockOutKey(k)" t-esc="k"/>
+                        </t>
+                        <button class="rep-pin-key rep-pin-key-clear"
+                                t-on-click="() => this.onClockOutKey('clear')">C</button>
+                        <button class="rep-pin-key" t-on-click="() => this.onClockOutKey('0')">0</button>
+                        <button class="rep-pin-key rep-pin-key-back"
+                                t-on-click="() => this.onClockOutKey('back')">⌫</button>
+                    </div>
+                    <button class="rep-pin-cancel" t-on-click="() => this.cancelClockOut()">Cancel</button>
+                </div>
+            </div>
         </div>
     </t>
 

@@ -310,6 +310,42 @@
 .btn-rep-print { background: #875a7b; color: #fff; }
 .btn-rep-print.is-printing { opacity: 0.6; pointer-events: none; }
 
+/* ── Modal (clock-out warning / PIN) ───────────────────────────────────── */
+.rep-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.rep-modal-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 26px 30px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+.rep-modal-card h3 {
+    margin: 0 0 12px;
+    color: #c0392b;
+    font-size: 18px;
+}
+.rep-modal-card p {
+    color: #1a1a2e;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+}
+.rep-modal-actions {
+    display: flex;
+    gap: 10px;
+}
+.rep-modal-actions .btn-rep { flex: 1; }
+
 /* ── Manager dashboard ──────────────────────────────────────────────────── */
 .mgr-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .mgr-tabs {
@@ -348,6 +384,52 @@
     flex: 1;
     overflow-y: auto;
     padding: 20px;
+}
+.mgr-controls {
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.mgr-mode-switch {
+    display: flex;
+    gap: 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    width: fit-content;
+}
+.mgr-mode-switch button {
+    background: #fff;
+    border: none;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    cursor: pointer;
+}
+.mgr-mode-switch button.active {
+    background: #875a7b;
+    color: #fff;
+}
+.mgr-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.mgr-range input[type="date"] {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
+.mgr-name-filter {
+    flex: 1;
+    min-width: 180px;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
 }
 .mgr-session-info {
     margin-bottom: 14px;

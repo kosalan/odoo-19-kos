@@ -28,17 +28,46 @@
             <!-- Selected employee report (overlay) -->
             <div t-elif="state.selectedReport" class="mgr-report-modal">
                 <EmployeeReport data="state.selectedReport"
+                                isManager="true"
                                 onBack="() => this.closeReport()"/>
             </div>
 
             <!-- Employee Reports tab -->
             <div t-elif="state.tab === 'reports'" class="mgr-reports">
+
+                <!-- Mode + filter controls -->
+                <div class="mgr-controls">
+                    <div class="mgr-mode-switch">
+                        <button t-att-class="{active: state.mode === 'session'}"
+                                t-on-click="() => this.setMode('session')">Current Session</button>
+                        <button t-att-class="{active: state.mode === 'range'}"
+                                t-on-click="() => this.setMode('range')">Date Range</button>
+                    </div>
+
+                    <div t-if="state.mode === 'range'" class="mgr-range">
+                        <button class="pool-quick" t-on-click="() => this.quickRange('today')">Today</button>
+                        <button class="pool-quick" t-on-click="() => this.quickRange('week')">Last 7</button>
+                        <button class="pool-quick" t-on-click="() => this.quickRange('30d')">Last 30</button>
+                        <button class="pool-quick" t-on-click="() => this.quickRange('month')">This Month</button>
+                        <span class="pool-from">From</span>
+                        <input type="date" t-model="state.startDate" t-on-change="() => this.load()"/>
+                        <span class="pool-to">To</span>
+                        <input type="date" t-model="state.endDate" t-on-change="() => this.load()"/>
+                        <input type="text" class="mgr-name-filter"
+                               placeholder="Filter by employee name…"
+                               t-model="state.nameFilter"
+                               t-on-input="() => this.load()"/>
+                    </div>
+                </div>
+
                 <div t-if="state.session" class="mgr-session-info">
                     <b>Session:</b> <t t-esc="state.session.name"/>
                     <span class="mgr-muted"> · Opened <t t-esc="state.session.opened_at"/></span>
                 </div>
+
                 <div t-if="!state.employees.length" class="rep-empty">
-                    No employee activity in this session yet.
+                    <t t-if="state.mode === 'session'">No employee activity in this session yet.</t>
+                    <t t-else="">No employee activity in this range.</t>
                 </div>
                 <table t-else="" class="mgr-table">
                     <thead>

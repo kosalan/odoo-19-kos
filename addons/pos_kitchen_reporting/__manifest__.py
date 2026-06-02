@@ -29,6 +29,7 @@
             'pos_kitchen_reporting/static/src/js/employee_report.js',
             'pos_kitchen_reporting/static/src/js/manager_dashboard.js',
             'pos_kitchen_reporting/static/src/js/tip_pool_view.js',
+            'pos_kitchen_reporting/static/src/js/login_clockin.js',
             'pos_kitchen_reporting/static/src/js/reporting_kiosk.js',
             'pos_kitchen_reporting/static/src/xml/server_report_receipt.xml',
             'pos_kitchen_reporting/static/src/xml/tip_pool_receipt.xml',

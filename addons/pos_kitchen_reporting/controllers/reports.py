@@ -114,27 +114,41 @@ def _compute_employee_report(employee, session, company):
     total_sales_revenue = sum(sales_by_method.values())
     cash_sales = sum(v for k, v in sales_by_method.items() if k in cash_method_names)
 
-    # Tip pool calculation
+    # Tip pool calculation:
+    #  - Eligible only if food_sales >= threshold
+    #  - Pool taken from card tips first; cash tips cover any shortfall
+    #  - If total tips (card + cash) cannot cover the target → no pool at all
     eligible = food_sales >= threshold and threshold > 0
-    pool_contribution = (food_sales * pool_pct / 100.0) if eligible else 0.0
+    target_pool = (food_sales * pool_pct / 100.0) if eligible else 0.0
 
     if not eligible:
+        pool_contribution = 0.0
         cash_tips_kept = total_cash_tips
         card_tips_to_payroll = total_card_tips
         tip_pool_shortfall = 0.0
         pool_paid_from = "none"
-    elif total_card_tips >= pool_contribution:
-        # Pool fully covered by card tips; remainder to payroll
+    elif total_card_tips >= target_pool:
+        # Card tips fully cover the pool
+        pool_contribution = target_pool
         cash_tips_kept = total_cash_tips
-        card_tips_to_payroll = total_card_tips - pool_contribution
+        card_tips_to_payroll = total_card_tips - target_pool
         tip_pool_shortfall = 0.0
         pool_paid_from = "card_tips"
-    else:
-        # Card tips insufficient — waitress pays shortfall in cash
-        cash_tips_kept = total_cash_tips
+    elif (total_card_tips + total_cash_tips) >= target_pool:
+        # Cash tips fill the gap; pool gets fully paid
+        shortfall = target_pool - total_card_tips
+        pool_contribution = target_pool
+        cash_tips_kept = total_cash_tips - shortfall
         card_tips_to_payroll = 0.0
-        tip_pool_shortfall = pool_contribution - total_card_tips
-        pool_paid_from = "cash_owed"
+        tip_pool_shortfall = shortfall
+        pool_paid_from = "card_and_cash_tips"
+    else:
+        # Neither card nor cash tips cover — no pool contribution
+        pool_contribution = 0.0
+        cash_tips_kept = total_cash_tips
+        card_tips_to_payroll = total_card_tips
+        tip_pool_shortfall = 0.0
+        pool_paid_from = "skipped_insufficient_tips"
 
     total_cash_due_to_till = cash_sales + tip_pool_shortfall
 
@@ -240,6 +254,201 @@ def _compute_employee_report(employee, session, company):
     }
 
 
+def _compute_range_report(employee, start_dt, end_dt, company):
+    """Aggregate the per-employee report across a date range (all sessions)."""
+    food_ids = _category_with_descendants(company.tip_pool_food_category_ids)
+    bar_ids = _category_with_descendants(company.tip_pool_bar_category_ids)
+    threshold = company.tip_pool_threshold or 0.0
+    pool_pct = company.tip_pool_pct or 0.0
+
+    orders = request.env["pos.order"].sudo().search(
+        [
+            ("date_order", ">=", start_dt),
+            ("date_order", "<=", end_dt),
+            ("employee_id", "=", employee.id),
+            ("state", "in", ("paid", "done", "invoiced")),
+        ]
+    )
+
+    sales_by_method, tips_by_method = {}, {}
+    cash_method_names = set()
+    total_cash_tips = 0.0
+    total_card_tips = 0.0
+
+    for order in orders:
+        order_tip = order.tip_amount or 0.0
+        payments = order.payment_ids.filtered(lambda p: p.amount != 0)
+        if not payments:
+            continue
+        non_cash = payments.filtered(lambda p: not p.payment_method_id.is_cash_count)
+        cash_pays = payments.filtered(lambda p: p.payment_method_id.is_cash_count)
+        if order_tip and non_cash:
+            tip_recipient = non_cash.sorted("amount", reverse=True)[0]
+        elif order_tip and cash_pays:
+            tip_recipient = cash_pays.sorted("amount", reverse=True)[0]
+        elif order_tip:
+            tip_recipient = payments.sorted("amount", reverse=True)[0]
+        else:
+            tip_recipient = None
+        for p in payments:
+            method_name = p.payment_method_id.name or "Unknown"
+            is_cash = p.payment_method_id.is_cash_count
+            if is_cash:
+                cash_method_names.add(method_name)
+            tip_share = order_tip if (tip_recipient and p.id == tip_recipient.id) else 0.0
+            revenue = (p.amount or 0.0) - tip_share
+            sales_by_method[method_name] = sales_by_method.get(method_name, 0.0) + revenue
+            tips_by_method[method_name] = tips_by_method.get(method_name, 0.0) + tip_share
+            if tip_share:
+                if is_cash:
+                    total_cash_tips += tip_share
+                else:
+                    total_card_tips += tip_share
+
+    food_sales = 0.0
+    bar_sales = 0.0
+    for order in orders:
+        for line in order.lines:
+            line_total = line.price_subtotal_incl or 0.0
+            if _line_category_matches(line, food_ids):
+                food_sales += line_total
+            elif _line_category_matches(line, bar_ids):
+                bar_sales += line_total
+
+    total_sales_revenue = sum(sales_by_method.values())
+    cash_sales = sum(v for k, v in sales_by_method.items() if k in cash_method_names)
+
+    eligible = food_sales >= threshold and threshold > 0
+    target_pool = (food_sales * pool_pct / 100.0) if eligible else 0.0
+    if not eligible:
+        pool_contribution = 0.0
+        cash_tips_kept = total_cash_tips
+        card_tips_to_payroll = total_card_tips
+        tip_pool_shortfall = 0.0
+        pool_paid_from = "none"
+    elif total_card_tips >= target_pool:
+        pool_contribution = target_pool
+        cash_tips_kept = total_cash_tips
+        card_tips_to_payroll = total_card_tips - target_pool
+        tip_pool_shortfall = 0.0
+        pool_paid_from = "card_tips"
+    elif (total_card_tips + total_cash_tips) >= target_pool:
+        shortfall = target_pool - total_card_tips
+        pool_contribution = target_pool
+        cash_tips_kept = total_cash_tips - shortfall
+        card_tips_to_payroll = 0.0
+        tip_pool_shortfall = shortfall
+        pool_paid_from = "card_and_cash_tips"
+    else:
+        pool_contribution = 0.0
+        cash_tips_kept = total_cash_tips
+        card_tips_to_payroll = total_card_tips
+        tip_pool_shortfall = 0.0
+        pool_paid_from = "skipped_insufficient_tips"
+
+    total_cash_due_to_till = cash_sales + tip_pool_shortfall
+
+    # Attendance within the range
+    punches_qs = request.env["hr.attendance"].sudo().search(
+        [
+            ("employee_id", "=", employee.id),
+            ("check_in", "<=", end_dt),
+            "|",
+            ("check_out", ">=", start_dt),
+            ("check_out", "=", False),
+        ],
+        order="check_in asc",
+    )
+    now = fields.Datetime.now()
+    punches = []
+    total_worked_minutes = 0.0
+    clipped_intervals = []
+    for att in punches_qs:
+        ci = att.check_in
+        co = att.check_out or now
+        eff_in = max(ci, start_dt)
+        eff_out = min(co, end_dt)
+        if eff_out > eff_in:
+            worked = (eff_out - eff_in).total_seconds() / 60.0
+            total_worked_minutes += worked
+            clipped_intervals.append((eff_in, eff_out))
+        punches.append(
+            {
+                "check_in": fields.Datetime.to_string(att.check_in),
+                "check_out": fields.Datetime.to_string(att.check_out)
+                if att.check_out
+                else None,
+                "minutes": round(
+                    (eff_out - eff_in).total_seconds() / 60.0
+                    if eff_out > eff_in
+                    else 0,
+                    1,
+                ),
+            }
+        )
+
+    total_break_minutes = 0.0
+    for i in range(1, len(clipped_intervals)):
+        gap_start = clipped_intervals[i - 1][1]
+        gap_end = clipped_intervals[i][0]
+        if gap_end > gap_start:
+            total_break_minutes += (gap_end - gap_start).total_seconds() / 60.0
+
+    return {
+        "employee": {
+            "id": employee.id,
+            "name": employee.name,
+            "job_title": employee.job_title or (employee.job_id.name if employee.job_id else ""),
+            "department": employee.department_id.name if employee.department_id else "",
+        },
+        "session": {
+            # In range mode, "session" displays the date span instead of a session name
+            "id": None,
+            "name": f"{fields.Date.to_string(start_dt.date())} → {fields.Date.to_string(end_dt.date())}",
+            "opened_at": fields.Datetime.to_string(start_dt),
+            "closed_at": fields.Datetime.to_string(end_dt),
+            "is_current": False,
+            "is_range": True,
+        },
+        "currency": {
+            "symbol": company.currency_id.symbol,
+            "position": company.currency_id.position,
+        },
+        "attendance": {
+            "punches": punches,
+            "total_worked_minutes": round(total_worked_minutes, 1),
+            "total_break_minutes": round(total_break_minutes, 1),
+        },
+        "sales_by_method": [
+            {"method": k, "amount": round(v, 2)} for k, v in sales_by_method.items()
+        ],
+        "total_sales": round(total_sales_revenue, 2),
+        "tips_by_method": [
+            {"method": k, "amount": round(v, 2)} for k, v in tips_by_method.items() if v
+        ],
+        "total_tips": round(total_cash_tips + total_card_tips, 2),
+        "total_cash_tips": round(total_cash_tips, 2),
+        "total_card_tips": round(total_card_tips, 2),
+        "categories": {
+            "food": round(food_sales, 2),
+            "bar": round(bar_sales, 2),
+        },
+        "payout": {
+            "food_sales": round(food_sales, 2),
+            "threshold": round(threshold, 2),
+            "pool_pct": pool_pct,
+            "eligible_for_pool": eligible,
+            "pool_contribution": round(pool_contribution, 2),
+            "cash_sales": round(cash_sales, 2),
+            "tip_pool_shortfall": round(tip_pool_shortfall, 2),
+            "total_cash_due_to_till": round(total_cash_due_to_till, 2),
+            "cash_tips_kept": round(cash_tips_kept, 2),
+            "card_tips_to_payroll": round(card_tips_to_payroll, 2),
+            "pool_paid_from": pool_paid_from,
+        },
+    }
+
+
 def _compute_tip_pool_for_range(company, start_date, end_date):
     """Sum pool contributions across all closed/in-progress sessions in the date range."""
     food_ids = _category_with_descendants(company.tip_pool_food_category_ids)
@@ -256,9 +465,13 @@ def _compute_tip_pool_for_range(company, start_date, end_date):
         ]
     )
 
-    # Group orders by employee (period total) and by (day, employee) for daily breakdown
-    emp_food_sales = {}            # {employee_id: total_food_sales}
-    daily_emp_food = {}            # {(date_str, employee_id): food_sales}
+    # Group orders by employee and track food sales + tips (per period + per day)
+    emp_food_sales = {}          # {emp_id: total_food_sales}
+    emp_card_tips = {}           # {emp_id: total_card_tips}
+    emp_cash_tips = {}           # {emp_id: total_cash_tips}
+    daily_emp_food = {}          # {(date_str, emp_id): food_sales}
+    daily_emp_card_tips = {}     # {(date_str, emp_id): card_tips}
+    daily_emp_cash_tips = {}     # {(date_str, emp_id): cash_tips}
     for session in sessions:
         orders = request.env["pos.order"].sudo().search(
             [
@@ -271,50 +484,78 @@ def _compute_tip_pool_for_range(company, start_date, end_date):
         for order in orders:
             if not order.employee_id:
                 continue
+            emp_id = order.employee_id.id
+            day_key = fields.Date.to_string(order.date_order.date())
+
             food_subtotal = 0.0
             for line in order.lines:
                 if _line_category_matches(line, food_ids):
                     food_subtotal += line.price_subtotal_incl or 0.0
-            emp_food_sales.setdefault(order.employee_id.id, 0.0)
-            emp_food_sales[order.employee_id.id] += food_subtotal
-            day_key = fields.Date.to_string(order.date_order.date())
-            daily_emp_food.setdefault((day_key, order.employee_id.id), 0.0)
-            daily_emp_food[(day_key, order.employee_id.id)] += food_subtotal
+            emp_food_sales.setdefault(emp_id, 0.0)
+            emp_food_sales[emp_id] += food_subtotal
+            daily_emp_food.setdefault((day_key, emp_id), 0.0)
+            daily_emp_food[(day_key, emp_id)] += food_subtotal
 
-    # Apply threshold + pool % per employee (period total)
+            # Attribute the tip to cash vs card using the same heuristic as the per-employee report
+            order_tip = order.tip_amount or 0.0
+            if order_tip:
+                payments = order.payment_ids.filtered(lambda p: p.amount != 0)
+                non_cash = payments.filtered(lambda p: not p.payment_method_id.is_cash_count)
+                if non_cash:
+                    emp_card_tips.setdefault(emp_id, 0.0)
+                    emp_card_tips[emp_id] += order_tip
+                    daily_emp_card_tips.setdefault((day_key, emp_id), 0.0)
+                    daily_emp_card_tips[(day_key, emp_id)] += order_tip
+                else:
+                    emp_cash_tips.setdefault(emp_id, 0.0)
+                    emp_cash_tips[emp_id] += order_tip
+                    daily_emp_cash_tips.setdefault((day_key, emp_id), 0.0)
+                    daily_emp_cash_tips[(day_key, emp_id)] += order_tip
+
+    # Apply threshold AND "total tips must cover" per employee (period total)
     total_pool = 0.0
     contributors = []
+    contributing_emp_ids = set()
     for emp_id, food_sales in emp_food_sales.items():
         if food_sales < threshold or threshold <= 0:
             continue
-        contribution = food_sales * pool_pct / 100.0
-        total_pool += contribution
+        target = food_sales * pool_pct / 100.0
+        card_tips = emp_card_tips.get(emp_id, 0.0)
+        cash_tips = emp_cash_tips.get(emp_id, 0.0)
+        if (card_tips + cash_tips) < target:
+            # Tips don't cover the target — no contribution at all
+            continue
+        total_pool += target
+        contributing_emp_ids.add(emp_id)
         emp = request.env["hr.employee"].sudo().browse(emp_id)
         contributors.append(
             {
                 "employee_id": emp.id if emp.exists() else None,
                 "employee_name": emp.name if emp.exists() else "Unknown",
                 "food_sales": round(food_sales, 2),
-                "contribution": round(contribution, 2),
+                "contribution": round(target, 2),
             }
         )
 
-    # Build daily-contribution breakdown — only show days where the employee
-    # also qualified for the period (i.e., they are in contributors)
-    contributing_emp_ids = {c["employee_id"] for c in contributors}
+    # Daily breakdown — only for contributing employees, only show days where
+    # the employee's tips that day covered the day's target.
     daily_breakdown = []
     for (day, emp_id), day_food in sorted(daily_emp_food.items(), reverse=True):
         if emp_id not in contributing_emp_ids:
             continue
+        day_target = day_food * pool_pct / 100.0
+        day_card = daily_emp_card_tips.get((day, emp_id), 0.0)
+        day_cash = daily_emp_cash_tips.get((day, emp_id), 0.0)
+        if (day_card + day_cash) < day_target:
+            continue
         emp = request.env["hr.employee"].sudo().browse(emp_id)
-        day_contribution = day_food * pool_pct / 100.0
         daily_breakdown.append(
             {
                 "date": day,
                 "employee_id": emp_id,
                 "employee_name": emp.name if emp.exists() else "Unknown",
                 "food_sales": round(day_food, 2),
-                "contribution": round(day_contribution, 2),
+                "contribution": round(day_target, 2),
             }
         )
 
@@ -428,6 +669,59 @@ class PosReportingController(http.Controller):
             )
         return result
 
+    @http.route("/pos/reporting/check_attendance", type="jsonrpc", auth="user")
+    def check_attendance(self, employee_id):
+        """Quick status check — used by the register login flow."""
+        emp = request.env["hr.employee"].sudo().browse(int(employee_id))
+        if not emp.exists():
+            return {"ok": False, "error": "not_found"}
+        is_manager = _is_manager(emp.user_id) if emp.user_id else False
+        open_att = request.env["hr.attendance"].sudo().search(
+            [("employee_id", "=", emp.id), ("check_out", "=", False)], limit=1
+        )
+        return {
+            "ok": True,
+            "is_manager": is_manager,
+            "clocked_in": bool(open_att),
+            "employee_name": emp.name,
+        }
+
+    @http.route("/pos/reporting/clock_in", type="jsonrpc", auth="user")
+    def clock_in(self, employee_id):
+        """Create an open attendance for the employee. PIN check skipped —
+        the caller has already authenticated the employee (e.g. via cashier login)."""
+        emp = request.env["hr.employee"].sudo().browse(int(employee_id))
+        if not emp.exists():
+            return {"ok": False, "error": "not_found"}
+        open_att = request.env["hr.attendance"].sudo().search(
+            [("employee_id", "=", emp.id), ("check_out", "=", False)], limit=1
+        )
+        if open_att:
+            return {"ok": True, "already_in": True}
+        request.env["hr.attendance"].sudo().create(
+            {"employee_id": emp.id, "check_in": fields.Datetime.now()}
+        )
+        return {"ok": True, "already_in": False}
+
+    @http.route("/pos/reporting/clock_out", type="jsonrpc", auth="user")
+    def clock_out(self, employee_id, pin=None):
+        """Close any open attendance for the given employee, after PIN check."""
+        emp = request.env["hr.employee"].sudo().browse(int(employee_id))
+        if not emp.exists():
+            return {"ok": False, "error": "Employee not found"}
+        if request.env.company.attendance_kiosk_use_pin:
+            if not pin:
+                return {"ok": False, "error": "pin_required"}
+            if emp.pin != pin:
+                return {"ok": False, "error": "wrong_pin"}
+        open_att = request.env["hr.attendance"].sudo().search(
+            [("employee_id", "=", emp.id), ("check_out", "=", False)], limit=1
+        )
+        if not open_att:
+            return {"ok": True, "already_out": True}
+        open_att.write({"check_out": fields.Datetime.now()})
+        return {"ok": True, "already_out": False}
+
     @http.route("/pos/reporting/verify_pin", type="jsonrpc", auth="user")
     def verify_pin(self, employee_id, pin):
         emp = request.env["hr.employee"].sudo().browse(int(employee_id))
@@ -480,6 +774,70 @@ class PosReportingController(http.Controller):
             return {"error": "No session"}
 
         return _compute_employee_report(emp, session, request.env.company)
+
+    @http.route("/pos/reporting/range_employees", type="jsonrpc", auth="user")
+    def range_employees(self, start_date, end_date, name_filter=None):
+        """List employees with activity in the given date range, optional name filter.
+        Returns per-employee totals for the period (orders, sales, tips)."""
+        start = fields.Date.from_string(start_date)
+        end = fields.Date.from_string(end_date)
+        start_dt = datetime.combine(start, datetime.min.time())
+        end_dt = datetime.combine(end, datetime.max.time())
+
+        orders = request.env["pos.order"].sudo().search(
+            [
+                ("date_order", ">=", start_dt),
+                ("date_order", "<=", end_dt),
+                ("state", "in", ("paid", "done", "invoiced")),
+            ]
+        )
+        totals = {}
+        for o in orders:
+            if not o.employee_id:
+                continue
+            totals.setdefault(
+                o.employee_id.id, {"sales": 0.0, "tips": 0.0, "orders": 0}
+            )
+            totals[o.employee_id.id]["sales"] += o.amount_total - (o.tip_amount or 0)
+            totals[o.employee_id.id]["tips"] += o.tip_amount or 0
+            totals[o.employee_id.id]["orders"] += 1
+
+        result = []
+        name_filter = (name_filter or "").strip().lower()
+        for emp_id, t in totals.items():
+            emp = request.env["hr.employee"].sudo().browse(emp_id)
+            if not emp.exists():
+                continue
+            if name_filter and name_filter not in (emp.name or "").lower():
+                continue
+            result.append(
+                {
+                    "employee_id": emp.id,
+                    "employee_name": emp.name,
+                    "orders": t["orders"],
+                    "sales": round(t["sales"], 2),
+                    "tips": round(t["tips"], 2),
+                }
+            )
+        result.sort(key=lambda r: r["employee_name"])
+        return {
+            "period_start": fields.Date.to_string(start),
+            "period_end": fields.Date.to_string(end),
+            "employees": result,
+        }
+
+    @http.route("/pos/reporting/range_report", type="jsonrpc", auth="user")
+    def range_report(self, employee_id, start_date, end_date):
+        """Aggregated employee report across a date range (all sessions overlapping)."""
+        emp = request.env["hr.employee"].sudo().browse(int(employee_id))
+        if not emp.exists():
+            return {"error": "Employee not found"}
+        start = fields.Date.from_string(start_date)
+        end = fields.Date.from_string(end_date)
+        start_dt = datetime.combine(start, datetime.min.time())
+        end_dt = datetime.combine(end, datetime.max.time())
+
+        return _compute_range_report(emp, start_dt, end_dt, request.env.company)
 
     @http.route("/pos/reporting/session_employees", type="jsonrpc", auth="user")
     def session_employees(self, session_id=None):
