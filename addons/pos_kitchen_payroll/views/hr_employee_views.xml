@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Replace the Wage row in the Payroll tab of the employee form
+         with Hourly Wage + computed monthly equivalent. -->
+    <record id="view_employee_form_inherit_hourly_wage" model="ir.ui.view">
+        <field name="name">hr.employee.form.inherit.hourly.wage</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//label[@for='wage']" position="replace">
+                <label for="hourly_wage" string="Hourly Wage"/>
+            </xpath>
+            <xpath expr="//div[@name='wage']" position="replace">
+                <div class="o_row" name="hourly_wage">
+                    <field name="hourly_wage" class="oe_inline o_hr_narrow_field" nolabel="1"/>
+                    <span class="text-muted ms-2" style="font-size:12px;">
+                        / hour ·
+                        <field name="monthly_wage_equivalent" class="oe_inline" nolabel="1" readonly="1"/>
+                        monthly equiv.
+                    </span>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

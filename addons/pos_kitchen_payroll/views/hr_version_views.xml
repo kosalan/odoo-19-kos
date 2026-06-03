@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Show Hourly Wage column in the hr.version list view -->
+    <record id="hr_version_list_view_inherit" model="ir.ui.view">
+        <field name="name">hr.version.list.inherit.hourly</field>
+        <field name="model">hr.version</field>
+        <field name="inherit_id" ref="hr.hr_version_list_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='wage']" position="after">
+                <field name="hourly_wage" widget="monetary" optional="show" string="Hourly Wage"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

@@ -775,6 +775,277 @@ class PosReportingController(http.Controller):
 
         return _compute_employee_report(emp, session, request.env.company)
 
+    @http.route("/pos/reporting/sales_dashboard", type="jsonrpc", auth="user")
+    def sales_dashboard(self, mode="session", session_id=None, start_date=None, end_date=None):
+        """Aggregated sales / tips / pool / product data for the manager dashboard.
+        mode='session' → current/open session.
+        mode='range' → all orders between start_date and end_date."""
+        company = request.env.company
+        if mode == "session":
+            if session_id:
+                session = request.env["pos.session"].sudo().browse(int(session_id))
+            else:
+                session = request.env["pos.session"].sudo().search(
+                    [("state", "!=", "closed")], order="start_at desc", limit=1
+                )
+            if not session:
+                return {"empty": True}
+            orders = request.env["pos.order"].sudo().search(
+                [
+                    ("session_id", "=", session.id),
+                    ("state", "in", ("paid", "done", "invoiced")),
+                ]
+            )
+            context = {
+                "mode": "session",
+                "session_name": session.name,
+                "opened_at": fields.Datetime.to_string(session.start_at),
+                "closed_at": fields.Datetime.to_string(session.stop_at) if session.stop_at else None,
+                "is_open": session.state != "closed",
+            }
+        else:
+            start = fields.Date.from_string(start_date)
+            end = fields.Date.from_string(end_date)
+            start_dt = datetime.combine(start, datetime.min.time())
+            end_dt = datetime.combine(end, datetime.max.time())
+            orders = request.env["pos.order"].sudo().search(
+                [
+                    ("date_order", ">=", start_dt),
+                    ("date_order", "<=", end_dt),
+                    ("state", "in", ("paid", "done", "invoiced")),
+                ]
+            )
+            context = {
+                "mode": "range",
+                "period_start": fields.Date.to_string(start),
+                "period_end": fields.Date.to_string(end),
+            }
+
+        food_ids = _category_with_descendants(company.tip_pool_food_category_ids)
+        bar_ids = _category_with_descendants(company.tip_pool_bar_category_ids)
+        threshold = company.tip_pool_threshold or 0.0
+        pool_pct = company.tip_pool_pct or 0.0
+
+        # ── Aggregations
+        method_totals = {}                # {method: {sales, tips}}
+        emp_data = {}                     # {emp_id: {…}}
+        product_data = {}                 # {product_id: {name, qty, amount, category}}
+        total_gross = 0.0
+        total_tax = 0.0
+        total_tip_cash = 0.0
+        total_tip_card = 0.0
+        order_count = 0
+
+        for order in orders:
+            order_count += 1
+            order_tip = order.tip_amount or 0.0
+            total_tax += (order.amount_tax or 0.0)
+            total_gross += (order.amount_total or 0.0) - order_tip
+
+            # Employee bucket
+            emp = order.employee_id
+            emp_key = emp.id if emp else 0
+            emp_name = emp.name if emp else "Unassigned"
+            ed = emp_data.setdefault(
+                emp_key,
+                {
+                    "employee_id": emp_key or None,
+                    "employee_name": emp_name,
+                    "department": emp.department_id.name if emp and emp.department_id else "",
+                    "methods": {},     # {method: revenue}
+                    "tip_cash": 0.0,
+                    "tip_card": 0.0,
+                    "food_sales": 0.0,
+                    "bar_sales": 0.0,
+                    "cash_sales": 0.0,
+                    "orders": 0,
+                },
+            )
+            ed["orders"] += 1
+
+            # Payments
+            payments = order.payment_ids.filtered(lambda p: p.amount != 0)
+            non_cash = payments.filtered(lambda p: not p.payment_method_id.is_cash_count)
+            cash_pays = payments.filtered(lambda p: p.payment_method_id.is_cash_count)
+            if order_tip and non_cash:
+                tip_recipient = non_cash.sorted("amount", reverse=True)[0]
+            elif order_tip and cash_pays:
+                tip_recipient = cash_pays.sorted("amount", reverse=True)[0]
+            elif order_tip:
+                tip_recipient = payments.sorted("amount", reverse=True)[0] if payments else None
+            else:
+                tip_recipient = None
+
+            for p in payments:
+                method = p.payment_method_id.name or "Unknown"
+                is_cash = p.payment_method_id.is_cash_count
+                tip_share = order_tip if (tip_recipient and p.id == tip_recipient.id) else 0.0
+                revenue = (p.amount or 0.0) - tip_share
+
+                method_totals.setdefault(method, {"sales": 0.0, "tips": 0.0, "is_cash": is_cash})
+                method_totals[method]["sales"] += revenue
+                method_totals[method]["tips"] += tip_share
+
+                ed["methods"].setdefault(method, 0.0)
+                ed["methods"][method] += revenue
+                if is_cash:
+                    ed["cash_sales"] += revenue
+                    if tip_share:
+                        ed["tip_cash"] += tip_share
+                        total_tip_cash += tip_share
+                elif tip_share:
+                    ed["tip_card"] += tip_share
+                    total_tip_card += tip_share
+
+            # Lines (categories + products)
+            for line in order.lines:
+                line_total = line.price_subtotal_incl or 0.0
+                if _line_category_matches(line, food_ids):
+                    ed["food_sales"] += line_total
+                    line_category = "Food"
+                elif _line_category_matches(line, bar_ids):
+                    ed["bar_sales"] += line_total
+                    line_category = "Bar"
+                else:
+                    line_category = "Other"
+                if line.product_id:
+                    pid = line.product_id.id
+                    pd = product_data.setdefault(
+                        pid,
+                        {
+                            "product_id": pid,
+                            "product_name": line.product_id.display_name,
+                            "category": line_category,
+                            "qty": 0.0,
+                            "amount": 0.0,
+                        },
+                    )
+                    pd["qty"] += line.qty or 0.0
+                    pd["amount"] += line_total
+
+        # ── Per-employee finalization (pool contribution, cash receivable)
+        by_employee = []
+        total_pool = 0.0
+        total_cash_receivable = 0.0
+        for emp_key, ed in emp_data.items():
+            food = ed["food_sales"]
+            cash_tips = ed["tip_cash"]
+            card_tips = ed["tip_card"]
+            eligible = food >= threshold and threshold > 0
+            target = (food * pool_pct / 100.0) if eligible else 0.0
+            if not eligible:
+                pool_contribution = 0.0
+                cash_tips_kept = cash_tips
+                card_to_payroll = card_tips
+                shortfall = 0.0
+            elif card_tips >= target:
+                pool_contribution = target
+                cash_tips_kept = cash_tips
+                card_to_payroll = card_tips - target
+                shortfall = 0.0
+            elif (card_tips + cash_tips) >= target:
+                shortfall = target - card_tips
+                pool_contribution = target
+                cash_tips_kept = cash_tips - shortfall
+                card_to_payroll = 0.0
+            else:
+                pool_contribution = 0.0
+                cash_tips_kept = cash_tips
+                card_to_payroll = card_tips
+                shortfall = 0.0
+            cash_due = ed["cash_sales"] + shortfall
+            total_pool += pool_contribution
+            total_cash_receivable += cash_due
+            by_employee.append(
+                {
+                    "employee_id": ed["employee_id"],
+                    "employee_name": ed["employee_name"],
+                    "department": ed["department"],
+                    "orders": ed["orders"],
+                    "methods": [
+                        {"method": k, "amount": round(v, 2)} for k, v in ed["methods"].items()
+                    ],
+                    "tip_cash": round(cash_tips, 2),
+                    "tip_card": round(card_tips, 2),
+                    "tip_total": round(cash_tips + card_tips, 2),
+                    "food_sales": round(food, 2),
+                    "bar_sales": round(ed["bar_sales"], 2),
+                    "pool_contribution": round(pool_contribution, 2),
+                    "tip_pool_shortfall": round(shortfall, 2),
+                    "cash_due_to_till": round(cash_due, 2),
+                    "cash_tips_kept": round(cash_tips_kept, 2),
+                    "card_tips_to_payroll": round(card_to_payroll, 2),
+                }
+            )
+        by_employee.sort(key=lambda r: -r["cash_due_to_till"])
+
+        by_method = [
+            {
+                "method": k,
+                "sales": round(v["sales"], 2),
+                "tips": round(v["tips"], 2),
+                "is_cash": v["is_cash"],
+            }
+            for k, v in method_totals.items()
+        ]
+        by_method.sort(key=lambda r: -r["sales"])
+
+        by_product = sorted(
+            (
+                {
+                    **pd,
+                    "qty": round(pd["qty"], 2),
+                    "amount": round(pd["amount"], 2),
+                }
+                for pd in product_data.values()
+            ),
+            key=lambda r: -r["amount"],
+        )
+
+        return {
+            "empty": order_count == 0,
+            "context": context,
+            "as_of": fields.Datetime.to_string(fields.Datetime.now()),
+            "totals": {
+                "gross_sales": round(total_gross, 2),
+                "tax": round(total_tax, 2),
+                "tip_cash": round(total_tip_cash, 2),
+                "tip_card": round(total_tip_card, 2),
+                "tip_total": round(total_tip_cash + total_tip_card, 2),
+                "pool_total": round(total_pool, 2),
+                "cash_receivable": round(total_cash_receivable, 2),
+                "orders": order_count,
+            },
+            "by_method": by_method,
+            "by_employee": by_employee,
+            "by_product": by_product,
+            "currency": {
+                "symbol": company.currency_id.symbol,
+                "position": company.currency_id.position,
+            },
+        }
+
+    @http.route("/pos/reporting/email_sales_dashboard", type="jsonrpc", auth="user")
+    def email_sales_dashboard(self, html, subject=None, recipient=None):
+        """Email the rendered HTML of the sales dashboard to the requested recipient.
+        Defaults to the current user's email."""
+        if not html:
+            return {"ok": False, "error": "Empty body"}
+        to_addr = recipient or request.env.user.email
+        if not to_addr:
+            return {"ok": False, "error": "No recipient email"}
+        subj = subject or "Sales Dashboard Report"
+        mail = request.env["mail.mail"].sudo().create(
+            {
+                "subject": subj,
+                "body_html": html,
+                "email_to": to_addr,
+                "email_from": request.env.user.email or request.env.company.email or False,
+            }
+        )
+        mail.send()
+        return {"ok": True, "sent_to": to_addr}
+
     @http.route("/pos/reporting/attendance_summary", type="jsonrpc", auth="user")
     def attendance_summary(self, start_date, end_date, name_filter=None):
         """All employee punches in the date range, with worked/break totals."""

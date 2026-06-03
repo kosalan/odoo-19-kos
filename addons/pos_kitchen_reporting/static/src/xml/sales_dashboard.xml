@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.SalesDashboard">
+        <div class="sd-wrap">
+
+            <!-- Mode + filter + actions -->
+            <div class="sd-controls">
+                <div class="mgr-mode-switch">
+                    <button t-att-class="{active: state.mode === 'session'}"
+                            t-on-click="() => this.setMode('session')">Current Session</button>
+                    <button t-att-class="{active: state.mode === 'range'}"
+                            t-on-click="() => this.setMode('range')">Last 30 / Range</button>
+                </div>
+
+                <div t-if="state.mode === 'range'" class="sd-range">
+                    <button class="pool-quick" t-on-click="() => this.quickRange('today')">Today</button>
+                    <button class="pool-quick" t-on-click="() => this.quickRange('week')">Last 7</button>
+                    <button class="pool-quick" t-on-click="() => this.quickRange('30d')">Last 30</button>
+                    <button class="pool-quick" t-on-click="() => this.quickRange('month')">This Month</button>
+                    <span class="pool-from">From</span>
+                    <input type="date" t-model="state.startDate" t-on-change="() => this.load()"/>
+                    <span class="pool-to">To</span>
+                    <input type="date" t-model="state.endDate" t-on-change="() => this.load()"/>
+                </div>
+
+                <div class="sd-actions">
+                    <button class="pool-print-btn"
+                            t-att-class="{ 'is-printing': state.printing }"
+                            t-on-click="() => this.print()">
+                        <i class="fa fa-print"/>
+                        <t t-if="state.printing"> Printing…</t>
+                        <t t-else=""> Print</t>
+                    </button>
+                    <button class="pool-print-btn sd-email-btn"
+                            t-att-class="{ 'is-printing': state.emailing }"
+                            t-on-click="() => this.email()">
+                        <i class="fa fa-envelope-o"/>
+                        <t t-if="state.emailing"> Sending…</t>
+                        <t t-else=""> Email</t>
+                    </button>
+                </div>
+            </div>
+
+            <div t-if="state.emailMsg" class="pool-msg" t-att-class="state.emailMsg.type"
+                 t-esc="state.emailMsg.text"/>
+
+            <div t-if="state.loading" class="rep-loading">
+                <i class="fa fa-spinner fa-spin fa-2x"/>
+            </div>
+
+            <div t-elif="state.data and state.data.empty" class="rep-empty">
+                No sales data
+                <t t-if="state.mode === 'session'"> in the current session</t>
+                <t t-else=""> in this period</t>.
+            </div>
+
+            <div t-elif="state.data" class="sd-content" t-ref="content">
+
+                <!-- Header strip with context + as-of -->
+                <div class="sd-header">
+                    <div>
+                        <t t-if="state.data.context.mode === 'session'">
+                            <div class="sd-header-title">
+                                <i class="fa fa-circle sd-live-dot"
+                                   t-if="state.data.context.is_open"/>
+                                Session <t t-esc="state.data.context.session_name"/>
+                            </div>
+                            <div class="sd-header-sub">
+                                Opened <t t-esc="state.data.context.opened_at"/>
+                                <t t-if="state.data.context.closed_at">
+                                    · Closed <t t-esc="state.data.context.closed_at"/>
+                                </t>
+                                <t t-else=""> · still open</t>
+                            </div>
+                        </t>
+                        <t t-else="">
+                            <div class="sd-header-title">
+                                <t t-esc="state.data.context.period_start"/>
+                                → <t t-esc="state.data.context.period_end"/>
+                            </div>
+                            <div class="sd-header-sub">
+                                <t t-esc="state.data.totals.orders"/> orders
+                            </div>
+                        </t>
+                    </div>
+                    <div class="sd-header-asof">As of <t t-esc="state.data.as_of"/></div>
+                </div>
+
+                <!-- Summary cards -->
+                <div class="sd-summary">
+                    <div class="sd-card sd-card-sales">
+                        <div class="sd-card-label">Net Sales</div>
+                        <div class="sd-card-value" t-esc="fmt(state.data.totals.gross_sales)"/>
+                        <div class="sd-card-sub">
+                            <t t-esc="state.data.totals.orders"/> orders · Tax <t t-esc="fmt(state.data.totals.tax)"/>
+                        </div>
+                    </div>
+                    <div class="sd-card sd-card-tips">
+                        <div class="sd-card-label">Tips Collected</div>
+                        <div class="sd-card-value" t-esc="fmt(state.data.totals.tip_total)"/>
+                        <div class="sd-card-sub">
+                            Cash <t t-esc="fmt(state.data.totals.tip_cash)"/>
+                            · Card <t t-esc="fmt(state.data.totals.tip_card)"/>
+                        </div>
+                    </div>
+                    <div class="sd-card sd-card-pool">
+                        <div class="sd-card-label">Tip Pool Contribution</div>
+                        <div class="sd-card-value" t-esc="fmt(state.data.totals.pool_total)"/>
+                        <div class="sd-card-sub">3.5% of qualifying food sales</div>
+                    </div>
+                    <div class="sd-card sd-card-cash">
+                        <div class="sd-card-label">Cash Receivable</div>
+                        <div class="sd-card-value" t-esc="fmt(state.data.totals.cash_receivable)"/>
+                        <div class="sd-card-sub">From servers to till</div>
+                    </div>
+                </div>
+
+                <!-- Payment method breakdown with bars -->
+                <div class="sd-section">
+                    <h3>Sales by Payment Method</h3>
+                    <t t-foreach="state.data.by_method" t-as="m" t-key="m.method">
+                        <div class="sd-method-row">
+                            <div class="sd-method-name">
+                                <i t-att-class="m.is_cash ? 'fa fa-money sd-icon-cash' : 'fa fa-credit-card sd-icon-card'"/>
+                                <t t-esc="m.method"/>
+                            </div>
+                            <div class="sd-method-bar">
+                                <div class="sd-method-bar-fill"
+                                     t-att-style="'width:' + methodShare(m.sales) + '%'"/>
+                            </div>
+                            <div class="sd-method-amount" t-esc="fmt(m.sales)"/>
+                            <div class="sd-method-tip">
+                                Tips <t t-esc="fmt(m.tips)"/>
+                            </div>
+                        </div>
+                    </t>
+                </div>
+
+                <!-- Per-server breakdown -->
+                <div class="sd-section">
+                    <h3>Sales by Server</h3>
+                    <table class="mgr-table sd-server-table">
+                        <thead>
+                            <tr>
+                                <th>Server</th>
+                                <th class="num">Orders</th>
+                                <th class="num">Food</th>
+                                <th class="num">Bar</th>
+                                <th class="num">Cash Tips</th>
+                                <th class="num">Card Tips</th>
+                                <th class="num">Pool</th>
+                                <th class="num">Cash Due</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="state.data.by_employee" t-as="e" t-key="e.employee_id || e.employee_name">
+                                <tr>
+                                    <td>
+                                        <b t-esc="e.employee_name"/>
+                                        <div t-if="e.department" class="mgr-muted"
+                                             style="font-size:11px"
+                                             t-esc="e.department"/>
+                                    </td>
+                                    <td class="num" t-esc="e.orders"/>
+                                    <td class="num" t-esc="fmt(e.food_sales)"/>
+                                    <td class="num" t-esc="fmt(e.bar_sales)"/>
+                                    <td class="num" t-esc="fmt(e.tip_cash)"/>
+                                    <td class="num" t-esc="fmt(e.tip_card)"/>
+                                    <td class="num" t-esc="fmt(e.pool_contribution)"/>
+                                    <td class="num sd-cash-due" t-esc="fmt(e.cash_due_to_till)"/>
+                                </tr>
+                                <tr class="sd-server-methods">
+                                    <td colspan="8">
+                                        <t t-foreach="e.methods" t-as="m" t-key="m.method">
+                                            <span class="sd-mini-method">
+                                                <t t-esc="m.method"/>:
+                                                <b t-esc="fmt(m.amount)"/>
+                                            </span>
+                                        </t>
+                                    </td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Products -->
+                <div class="sd-section">
+                    <h3>Top Items</h3>
+                    <table class="mgr-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Category</th>
+                                <th class="num">Qty</th>
+                                <th class="num">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="state.data.by_product" t-as="p" t-key="p.product_id">
+                                <tr>
+                                    <td t-esc="p.product_name"/>
+                                    <td>
+                                        <span class="sd-cat-badge"
+                                              t-att-class="'sd-cat-' + p.category.toLowerCase()"
+                                              t-esc="p.category"/>
+                                    </td>
+                                    <td class="num" t-esc="p.qty"/>
+                                    <td class="num" t-esc="fmt(p.amount)"/>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+    </t>
+
+</templates>

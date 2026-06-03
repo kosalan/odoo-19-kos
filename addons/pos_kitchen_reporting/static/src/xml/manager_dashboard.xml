@@ -21,6 +21,11 @@
                         t-on-click="() => this.state.tab = 'attendance'">
                     Attendance
                 </button>
+                <button class="mgr-tab"
+                        t-att-class="{active: state.tab === 'sales'}"
+                        t-on-click="() => this.state.tab = 'sales'">
+                    Sales Dashboard
+                </button>
                 <div class="mgr-tabs-spacer"/>
                 <button class="mgr-back" t-on-click="() => this.props.onBack()">← Switch User</button>
             </div>
@@ -107,6 +112,9 @@
 
             <!-- Attendance tab -->
             <AttendanceReport t-elif="state.tab === 'attendance'"/>
+
+            <!-- Sales Dashboard tab -->
+            <SalesDashboard t-elif="state.tab === 'sales'"/>
 
         </div>
     </t>

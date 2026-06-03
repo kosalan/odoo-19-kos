@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_kitchen_reporting.SalesDashboardReceipt">
+        <div class="pos-receipt" style="font-family: monospace; width: 300px; padding: 4px;">
+            <div style="text-align:center; font-size:10px; color:#666;">
+                <t t-esc="new Date().toLocaleString()"/>
+            </div>
+            <div style="text-align:center; font-weight:bold; font-size:14px;">SALES DASHBOARD</div>
+            <div style="text-align:center; font-size:11px;">
+                <t t-if="props.data.context.mode === 'session'">
+                    Session <t t-esc="props.data.context.session_name"/>
+                </t>
+                <t t-else="">
+                    <t t-esc="props.data.context.period_start"/> →
+                    <t t-esc="props.data.context.period_end"/>
+                </t>
+            </div>
+            <div style="text-align:center; font-size:10px; color:#666;">
+                As of <t t-esc="props.data.as_of"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="font-weight:bold;">SUMMARY</div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Orders</span><span t-esc="props.data.totals.orders"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Net Sales</span><span t-esc="fmt(props.data.totals.gross_sales)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Tax</span><span t-esc="fmt(props.data.totals.tax)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Tips (cash)</span><span t-esc="fmt(props.data.totals.tip_cash)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>Tips (card)</span><span t-esc="fmt(props.data.totals.tip_card)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                <span>Tip Pool</span><span t-esc="fmt(props.data.totals.pool_total)"/>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                <span>Cash Receivable</span><span t-esc="fmt(props.data.totals.cash_receivable)"/>
+            </div>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="font-weight:bold;">BY PAYMENT METHOD</div>
+            <t t-foreach="props.data.by_method" t-as="m" t-key="m.method">
+                <div style="display:flex; justify-content:space-between;">
+                    <span t-esc="m.method"/>
+                    <span t-esc="fmt(m.sales)"/>
+                </div>
+                <div t-if="m.tips" style="font-size:10px; color:#555; padding-left:8px;">
+                    tips <t t-esc="fmt(m.tips)"/>
+                </div>
+            </t>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="font-weight:bold;">BY SERVER</div>
+            <t t-foreach="props.data.by_employee" t-as="e" t-key="e.employee_id || e.employee_name">
+                <div style="font-weight:bold; margin-top:4px;">
+                    <t t-esc="e.employee_name"/>
+                </div>
+                <div style="font-size:10px; color:#555;">
+                    Food <t t-esc="fmt(e.food_sales)"/>
+                    · Bar <t t-esc="fmt(e.bar_sales)"/>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Pool</span><span t-esc="fmt(e.pool_contribution)"/>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Cash Due</span><span t-esc="fmt(e.cash_due_to_till)"/>
+                </div>
+            </t>
+
+            <div style="border-top: 1px dashed #000; margin: 6px 0;"/>
+            <div style="font-weight:bold;">TOP ITEMS</div>
+            <t t-foreach="props.data.by_product.slice(0, 20)" t-as="p" t-key="p.product_id">
+                <div style="display:flex; justify-content:space-between;">
+                    <span><t t-esc="p.qty"/>× <t t-esc="p.product_name"/></span>
+                    <span t-esc="fmt(p.amount)"/>
+                </div>
+            </t>
+        </div>
+    </t>
+
+</templates>
