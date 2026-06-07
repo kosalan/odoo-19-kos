@@ -25,23 +25,55 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 
 
-CONFIG_FILE = Path("/app/config/config.json")
+CONFIG_FILE = Path(os.getenv("IOT_CONFIG_DIR", "/app/config")) / "config.json"
 CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # ── Config helpers ────────────────────────────────────────────────────────────
 
-def load_config():
-    if CONFIG_FILE.exists():
-        try:
-            return json.loads(CONFIG_FILE.read_text())
-        except Exception:
-            pass
+IMAGE_MODES = ("graphics", "bitImageRaster", "bitImageColumn")
+DEFAULT_IMAGE_MODE = "graphics"   # works on modern Epson; Munbyn/generic = bitImageRaster
+
+
+def _default_config():
     return {
         "receipt_printer_ip":  os.getenv("RECEIPT_PRINTER_IP", ""),
         "kitchen_printer_ip":  os.getenv("KITCHEN_PRINTER_IP", ""),
         "printer_port":        int(os.getenv("PRINTER_PORT", "9100")),
         "printer_timeout":     int(os.getenv("PRINTER_TIMEOUT", "5")),
+        # Last scanned subnet remembered between page loads.
+        "scan_subnet":         os.getenv("LAN_SUBNET", "192.168.1").rstrip("."),
+        # Image mode for the default receipt + kitchen printers.
+        "receipt_image_mode":  DEFAULT_IMAGE_MODE,
+        "kitchen_image_mode":  DEFAULT_IMAGE_MODE,
+        # list of {"floor": "<floor name>", "ip": "<printer ip>", "image_mode": "..."}.
+        # When a receipt print request includes a `floor`, we route to the
+        # matching printer; otherwise fall back to receipt_printer_ip.
+        "floor_printers":      [],
     }
+
+
+def _normalize_mode(mode):
+    mode = (mode or "").strip()
+    return mode if mode in IMAGE_MODES else DEFAULT_IMAGE_MODE
+
+
+def load_config():
+    cfg = _default_config()
+    if CONFIG_FILE.exists():
+        try:
+            stored = json.loads(CONFIG_FILE.read_text())
+            cfg.update(stored)
+        except Exception:
+            pass
+    # Ensure keys exist for older configs
+    cfg.setdefault("floor_printers", [])
+    cfg.setdefault("scan_subnet", detect_subnet())
+    cfg.setdefault("receipt_image_mode", DEFAULT_IMAGE_MODE)
+    cfg.setdefault("kitchen_image_mode", DEFAULT_IMAGE_MODE)
+    # Every floor printer needs a mode; default any missing
+    for fp in cfg["floor_printers"]:
+        fp.setdefault("image_mode", DEFAULT_IMAGE_MODE)
+    return cfg
 
 def save_config(cfg):
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
@@ -214,6 +246,50 @@ CONFIG_HTML = """
     .btn-kitchen { background: #28a745; color: white; }
     .scanning-msg { text-align: center; color: #666; font-size: 14px;
                     padding: 16px; display: none; }
+    .hint { font-size: 12px; color: #888; margin-top: 4px; }
+    .assign-target {
+      padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px;
+      font-size: 12px; background: #fff;
+    }
+    .floor-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 130px auto auto auto;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+      padding: 8px;
+      background: #fafafa;
+      border-radius: 8px;
+    }
+    .floor-row input,
+    .floor-row select {
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      margin: 0;
+      background: #fff;
+    }
+    .ip-with-mode {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .ip-with-mode input { flex: 1; }
+    .mode-select {
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+      background: #fff;
+      min-width: 130px;
+    }
+    .floor-status { display: inline-block; width: 10px; height: 10px;
+                    border-radius: 50%; }
+    .btn-row {
+      border: none; border-radius: 6px; padding: 6px 10px;
+      cursor: pointer; font-size: 12px; font-weight: 600;
+    }
+    .btn-row-test { background: #17a2b8; color: #fff; }
+    .btn-row-del  { background: #dc3545; color: #fff; padding: 6px 10px; }
   </style>
 </head>
 <body>
@@ -228,47 +304,110 @@ CONFIG_HTML = """
   <!-- Scanner -->
   <label>Scan Network for Printers</label>
   <div style="display:flex; gap:8px; margin-top:6px;">
-    <input type="text" id="subnet" value="{{ subnet }}" placeholder="192.168.50" style="flex:1;">
-    <button class="btn btn-scan" style="margin:0;width:auto;padding:10px 18px;"
+    <input type="text" id="subnet" value="{{ cfg.scan_subnet }}" placeholder="192.168.50" style="flex:1;">
+    <button type="button" class="btn btn-scan" style="margin:0;width:auto;padding:10px 18px;"
             onclick="scanNetwork()">Scan</button>
   </div>
+  <p class="hint">Edit and click Scan. The subnet is saved with the configuration so this persists.</p>
   <p class="scanning-msg" id="scanning-msg">⏳ Scanning network... (up to 15 seconds)</p>
   <div class="scanner-results" id="scan-results"></div>
 
   <hr class="divider">
 
   <!-- Manual config -->
-  <form method="POST" action="/config">
-    <label>Receipt Printer IP</label>
-    <input type="text" name="receipt_printer_ip" id="receipt_ip"
-           value="{{ cfg.receipt_printer_ip }}" placeholder="e.g. 192.168.50.124">
-    <div class="status-row">
-      <span class="status {{ 'ok' if receipt_ok else 'err' }}"></span>
-      {{ 'Reachable' if receipt_ok else 'Not reachable' }}
-    </div>
+  <form method="POST" action="/config" id="config-form">
+    <!-- Mirror of the scan input so it persists across reloads -->
+    <input type="hidden" name="scan_subnet" id="scan_subnet_hidden" value="{{ cfg.scan_subnet }}">
 
     <label>Kitchen Printer IP</label>
-    <input type="text" name="kitchen_printer_ip" id="kitchen_ip"
-           value="{{ cfg.kitchen_printer_ip }}" placeholder="e.g. 192.168.50.125">
+    <div class="ip-with-mode">
+      <input type="text" name="kitchen_printer_ip" id="kitchen_ip"
+             value="{{ cfg.kitchen_printer_ip }}" placeholder="e.g. 192.168.50.99">
+      <select name="kitchen_image_mode" class="mode-select" title="Image mode">
+        <option value="graphics" {{ 'selected' if cfg.kitchen_image_mode == 'graphics' else '' }}>graphics (modern Epson)</option>
+        <option value="bitImageRaster" {{ 'selected' if cfg.kitchen_image_mode == 'bitImageRaster' else '' }}>bitImageRaster (Munbyn/generic)</option>
+        <option value="bitImageColumn" {{ 'selected' if cfg.kitchen_image_mode == 'bitImageColumn' else '' }}>bitImageColumn (legacy Epson)</option>
+      </select>
+    </div>
     <div class="status-row">
       <span class="status {{ 'ok' if kitchen_ok else 'err' }}"></span>
       {{ 'Reachable' if kitchen_ok else 'Not reachable' }}
     </div>
 
+    <label>Default Receipt Printer IP <span class="hint">(used when no floor matches)</span></label>
+    <div class="ip-with-mode">
+      <input type="text" name="receipt_printer_ip" id="receipt_ip"
+             value="{{ cfg.receipt_printer_ip }}" placeholder="e.g. 192.168.50.10">
+      <select name="receipt_image_mode" class="mode-select" title="Image mode">
+        <option value="graphics" {{ 'selected' if cfg.receipt_image_mode == 'graphics' else '' }}>graphics (modern Epson)</option>
+        <option value="bitImageRaster" {{ 'selected' if cfg.receipt_image_mode == 'bitImageRaster' else '' }}>bitImageRaster (Munbyn/generic)</option>
+        <option value="bitImageColumn" {{ 'selected' if cfg.receipt_image_mode == 'bitImageColumn' else '' }}>bitImageColumn (legacy Epson)</option>
+      </select>
+    </div>
+    <div class="status-row">
+      <span class="status {{ 'ok' if receipt_ok else 'err' }}"></span>
+      {{ 'Reachable' if receipt_ok else 'Not reachable' }}
+    </div>
+
+    <hr class="divider">
+
+    <label>Floor → Receipt Printer</label>
+    <p class="hint">
+      Each restaurant floor can have its own receipt printer. Floor names must
+      match the names defined in Odoo (POS → Restaurant → Floors).
+    </p>
+    <div id="floor-rows">
+      {% for fp in cfg.floor_printers %}
+      <div class="floor-row">
+        <input type="text" name="floor_name[]" placeholder="Floor name (e.g. Main Floor)"
+               value="{{ fp.floor }}">
+        <input type="text" name="floor_ip[]" placeholder="Printer IP"
+               value="{{ fp.ip }}">
+        <select name="floor_image_mode[]" class="mode-select">
+          <option value="graphics" {{ 'selected' if fp.image_mode == 'graphics' else '' }}>graphics</option>
+          <option value="bitImageRaster" {{ 'selected' if fp.image_mode == 'bitImageRaster' else '' }}>bitImageRaster</option>
+          <option value="bitImageColumn" {{ 'selected' if fp.image_mode == 'bitImageColumn' else '' }}>bitImageColumn</option>
+        </select>
+        <span class="floor-status status {{ 'ok' if fp.get('reachable') else 'err' }}"></span>
+        <button type="button" class="btn-row btn-row-test"
+                onclick="testRow(this)">Test</button>
+        <button type="button" class="btn-row btn-row-del"
+                onclick="this.parentElement.remove()">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn btn-scan" style="margin-top:8px;"
+            onclick="addFloorRow()">+ Add Floor Mapping</button>
+
     <label>Printer Port</label>
     <input type="number" name="printer_port" value="{{ cfg.printer_port }}" placeholder="9100">
 
-    <button class="btn" type="submit">Save Configuration</button>
+    <button class="btn" type="submit" style="margin-top:18px;">Save Configuration</button>
   </form>
 
-  <form method="POST" action="/test_print">
-    <button class="btn btn-test" type="submit">Test Print (Receipt Printer)</button>
+  <form method="POST" action="/test_print" style="margin-top:8px;">
+    <button class="btn btn-test" type="submit">Test Default Receipt Printer</button>
   </form>
 </div>
 
 <script>
+// Keep hidden scan_subnet field in sync with the visible subnet input
+document.getElementById('subnet').addEventListener('input', (e) => {
+  document.getElementById('scan_subnet_hidden').value = e.target.value.trim();
+});
+
+function getFloorOptions() {
+  const rows = document.querySelectorAll('#floor-rows .floor-row');
+  return Array.from(rows).map((r, idx) => {
+    const name = r.querySelector('input[name="floor_name[]"]').value || `Floor #${idx+1}`;
+    return `<option value="floor:${idx}">${name}</option>`;
+  }).join('');
+}
+
 function scanNetwork() {
   const subnet = document.getElementById('subnet').value.trim();
+  // Persist on the hidden field so a future Save keeps it
+  document.getElementById('scan_subnet_hidden').value = subnet;
   document.getElementById('scanning-msg').style.display = 'block';
   document.getElementById('scan-results').innerHTML = '';
   fetch('/scan?subnet=' + encodeURIComponent(subnet))
@@ -287,8 +426,13 @@ function scanNetwork() {
             <div class="printer-name">${p.name || 'Generic ESC/POS Printer'} &nbsp;·&nbsp; port ${p.port}</div>
           </div>
           <div class="assign-btns">
-            <button class="btn-assign btn-receipt" onclick="assign('receipt','${p.ip}')">Receipt</button>
-            <button class="btn-assign btn-kitchen" onclick="assign('kitchen','${p.ip}')">Kitchen</button>
+            <select class="assign-target" data-ip="${p.ip}" onchange="assignToTarget(this)">
+              <option value="">Assign to…</option>
+              <option value="kitchen">Kitchen</option>
+              <option value="receipt">Default Receipt</option>
+              <option value="__newfloor__">+ New Floor</option>
+              ${getFloorOptions()}
+            </select>
           </div>
         </div>`).join('');
     })
@@ -298,9 +442,58 @@ function scanNetwork() {
     });
 }
 
-function assign(type, ip) {
-  if (type === 'receipt') document.getElementById('receipt_ip').value = ip;
-  else document.getElementById('kitchen_ip').value = ip;
+function assignToTarget(sel) {
+  const ip = sel.dataset.ip;
+  const val = sel.value;
+  if (!val || !ip) { sel.value = ''; return; }
+  if (val === 'kitchen') {
+    document.getElementById('kitchen_ip').value = ip;
+  } else if (val === 'receipt') {
+    document.getElementById('receipt_ip').value = ip;
+  } else if (val === '__newfloor__') {
+    const name = prompt('Floor name (must match Odoo floor name):');
+    if (!name) { sel.value = ''; return; }
+    addFloorRow(name, ip);
+  } else if (val.startsWith('floor:')) {
+    const idx = parseInt(val.slice(6), 10);
+    const row = document.querySelectorAll('#floor-rows .floor-row')[idx];
+    if (row) row.querySelector('input[name="floor_ip[]"]').value = ip;
+  }
+  sel.value = '';
+}
+
+function addFloorRow(name = '', ip = '') {
+  const wrap = document.getElementById('floor-rows');
+  const row = document.createElement('div');
+  row.className = 'floor-row';
+  row.innerHTML = `
+    <input type="text" name="floor_name[]" placeholder="Floor name (e.g. Main Floor)" value="${name}">
+    <input type="text" name="floor_ip[]" placeholder="Printer IP" value="${ip}">
+    <select name="floor_image_mode[]" class="mode-select">
+      <option value="graphics" selected>graphics</option>
+      <option value="bitImageRaster">bitImageRaster</option>
+      <option value="bitImageColumn">bitImageColumn</option>
+    </select>
+    <span class="floor-status status err"></span>
+    <button type="button" class="btn-row btn-row-test" onclick="testRow(this)">Test</button>
+    <button type="button" class="btn-row btn-row-del" onclick="this.parentElement.remove()">×</button>`;
+  wrap.appendChild(row);
+}
+
+function testRow(btn) {
+  const row  = btn.parentElement;
+  const name = row.querySelector('input[name="floor_name[]"]').value || 'Floor';
+  const ip   = row.querySelector('input[name="floor_ip[]"]').value;
+  const mode = row.querySelector('select[name="floor_image_mode[]"]').value || 'graphics';
+  if (!ip) { alert('Enter a printer IP first.'); return; }
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/test_print';
+  form.innerHTML = `<input type="hidden" name="ip" value="${ip}">
+                    <input type="hidden" name="label" value="${name}">
+                    <input type="hidden" name="image_mode" value="${mode}">`;
+  document.body.appendChild(form);
+  form.submit();
 }
 </script>
 </body>
@@ -309,13 +502,7 @@ function assign(type, ip) {
 
 @app.route("/", methods=["GET"])
 def config_page():
-    cfg        = load_config()
-    receipt_ok = printer_reachable(cfg["receipt_printer_ip"], cfg["printer_port"])
-    kitchen_ok = printer_reachable(cfg["kitchen_printer_ip"], cfg["printer_port"])
-    return render_template_string(CONFIG_HTML, cfg=cfg,
-                                  receipt_ok=receipt_ok, kitchen_ok=kitchen_ok,
-                                  subnet=detect_subnet(),
-                                  message=None, success=False)
+    return _render_config(load_config())
 
 
 @app.route("/scan")
@@ -330,45 +517,75 @@ def scan():
 @app.route("/config", methods=["POST"])
 def save_config_route():
     cfg = load_config()
-    cfg["receipt_printer_ip"] = request.form.get("receipt_printer_ip", "").strip()
-    cfg["kitchen_printer_ip"] = request.form.get("kitchen_printer_ip", "").strip()
-    cfg["printer_port"]       = int(request.form.get("printer_port", 9100) or 9100)
+    cfg["receipt_printer_ip"]  = request.form.get("receipt_printer_ip", "").strip()
+    cfg["kitchen_printer_ip"]  = request.form.get("kitchen_printer_ip", "").strip()
+    cfg["receipt_image_mode"]  = _normalize_mode(request.form.get("receipt_image_mode"))
+    cfg["kitchen_image_mode"]  = _normalize_mode(request.form.get("kitchen_image_mode"))
+    cfg["scan_subnet"]         = (request.form.get("scan_subnet", "") or detect_subnet()).strip().rstrip(".")
+    cfg["printer_port"]        = int(request.form.get("printer_port", 9100) or 9100)
+    # Floor printers come as parallel lists: floor_name[] / floor_ip[] / floor_image_mode[]
+    names = request.form.getlist("floor_name[]")
+    ips   = request.form.getlist("floor_ip[]")
+    modes = request.form.getlist("floor_image_mode[]")
+    floor_printers = []
+    for i, (name, ip) in enumerate(zip(names, ips)):
+        name = (name or "").strip()
+        ip   = (ip or "").strip()
+        mode = _normalize_mode(modes[i] if i < len(modes) else DEFAULT_IMAGE_MODE)
+        if name and ip:
+            floor_printers.append({"floor": name, "ip": ip, "image_mode": mode})
+    cfg["floor_printers"] = floor_printers
     save_config(cfg)
-    log.info(f"Config saved: receipt={cfg['receipt_printer_ip']} kitchen={cfg['kitchen_printer_ip']}")
+    log.info(f"Config saved: receipt={cfg['receipt_printer_ip']} ({cfg['receipt_image_mode']}) "
+             f"kitchen={cfg['kitchen_printer_ip']} ({cfg['kitchen_image_mode']}) "
+             f"floors={len(floor_printers)}")
+    return _render_config(cfg, "Configuration saved.", success=True)
+
+
+def _render_config(cfg, message=None, success=False):
     receipt_ok = printer_reachable(cfg["receipt_printer_ip"], cfg["printer_port"])
     kitchen_ok = printer_reachable(cfg["kitchen_printer_ip"], cfg["printer_port"])
+    for fp in cfg.get("floor_printers", []):
+        fp["reachable"] = printer_reachable(fp.get("ip"), cfg["printer_port"])
     return render_template_string(CONFIG_HTML, cfg=cfg,
                                   receipt_ok=receipt_ok, kitchen_ok=kitchen_ok,
                                   subnet=detect_subnet(),
-                                  message="Configuration saved.", success=True)
+                                  message=message, success=success)
 
 @app.route("/test_print", methods=["POST"])
 def test_print_route():
-    cfg = load_config()
-    ip  = cfg["receipt_printer_ip"]
+    """Test print for an arbitrary IP + image mode. Defaults to the receipt printer."""
+    cfg   = load_config()
+    ip    = (request.form.get("ip") or cfg["receipt_printer_ip"]).strip()
+    label = request.form.get("label") or "Receipt Printer"
+    mode  = _normalize_mode(request.form.get("image_mode") or cfg.get("receipt_image_mode"))
     if not ip:
-        receipt_ok = kitchen_ok = False
-        return render_template_string(CONFIG_HTML, cfg=cfg,
-                                      receipt_ok=receipt_ok, kitchen_ok=kitchen_ok,
-                                      subnet=detect_subnet(),
-                                      message="No receipt printer IP configured.", success=False)
+        return _render_config(cfg, "No printer IP provided.", success=False)
     try:
         printer = get_printer(ip, cfg)
+        # Text portion — should always work
         printer.set(align="center", bold=True)
         printer.text("=== TEST PRINT ===\n")
         printer.set(align="left", bold=False)
-        printer.text(f"Receipt: {ip}:{cfg['printer_port']}\n")
-        printer.text("ESC/POS connection OK\n")
+        printer.text(f"{label}: {ip}:{cfg['printer_port']}\n")
+        printer.text(f"Image mode: {mode}\n")
+        # Image portion — proves the chosen image mode is supported
+        try:
+            from PIL import Image, ImageDraw
+            img = Image.new("L", (300, 60), 255)
+            ImageDraw.Draw(img).text((10, 18), "IMAGE TEST OK", fill=0)
+            printer.image(img, impl=mode, center=True)
+        except Exception as ie:
+            printer.text(f"(image test failed: {ie})\n")
         printer.cut()
-        msg, ok = "Test print sent successfully.", True
+        try:
+            printer.close()
+        except Exception:
+            pass
+        msg, ok = f"Test print sent to {label} ({ip}) using {mode}.", True
     except Exception as e:
         msg, ok = f"Print failed: {e}", False
-    receipt_ok = printer_reachable(cfg["receipt_printer_ip"], cfg["printer_port"])
-    kitchen_ok = printer_reachable(cfg["kitchen_printer_ip"], cfg["printer_port"])
-    return render_template_string(CONFIG_HTML, cfg=cfg,
-                                  receipt_ok=receipt_ok, kitchen_ok=kitchen_ok,
-                                  subnet=detect_subnet(),
-                                  message=msg, success=ok)
+    return _render_config(cfg, msg, success=ok)
 
 # ── Odoo hw_proxy API ─────────────────────────────────────────────────────────
 
@@ -430,6 +647,18 @@ def handshake():
     return jsonify({"id": data.get("id", 1), "jsonrpc": "2.0", "result": {"status": "connected"}})
 
 
+def _resolve_floor_printer(cfg, floor_name):
+    """Find the configured (ip, image_mode) for the given floor name.
+    Returns (None, None) if no match."""
+    if not floor_name:
+        return (None, None)
+    target = floor_name.strip().lower()
+    for fp in cfg.get("floor_printers", []):
+        if (fp.get("floor") or "").strip().lower() == target:
+            return (fp.get("ip") or None, _normalize_mode(fp.get("image_mode")))
+    return (None, None)
+
+
 @app.route("/hw_proxy/default_printer_action", methods=["GET", "POST", "OPTIONS"])
 def default_printer_action():
     cfg      = load_config()
@@ -438,6 +667,7 @@ def default_printer_action():
     params   = data.get("params", {})
     pdata    = params.get("data", {})
     img_b64  = pdata.get("receipt", "")
+    floor    = (pdata.get("floor") or "").strip()
 
     if not img_b64:
         return jsonify({"id": req_id, "jsonrpc": "2.0",
@@ -446,17 +676,32 @@ def default_printer_action():
     caller     = request.remote_addr or ""
     user_agent = request.headers.get("User-Agent", "").lower()
     is_server  = "python" in user_agent or "odoo" in user_agent
-    printer_type = "KITCHEN" if is_server else "RECEIPT"
-    target_ip = (cfg["kitchen_printer_ip"] or cfg["receipt_printer_ip"]) if is_server \
-                else cfg["receipt_printer_ip"]
 
-    log.info(f"[{printer_type}] Print request from {caller} (ua: {user_agent[:40]}) → {target_ip}")
+    if is_server:
+        printer_type = "KITCHEN"
+        target_ip = cfg["kitchen_printer_ip"] or cfg["receipt_printer_ip"]
+        image_mode = _normalize_mode(cfg.get("kitchen_image_mode"))
+        log_extra = ""
+    else:
+        printer_type = "RECEIPT"
+        floor_ip, floor_mode = _resolve_floor_printer(cfg, floor)
+        if floor_ip:
+            target_ip = floor_ip
+            image_mode = floor_mode
+            log_extra = f" (floor: {floor})"
+        else:
+            target_ip = cfg["receipt_printer_ip"]
+            image_mode = _normalize_mode(cfg.get("receipt_image_mode"))
+            log_extra = f" (floor: {floor or 'unspecified'} → fallback)"
+
+    log.info(f"[{printer_type}] Print request from {caller} (ua: {user_agent[:40]}) → "
+             f"{target_ip} mode={image_mode}{log_extra}")
 
     printer = None
     try:
         img = Image.open(io.BytesIO(base64.b64decode(img_b64)))
         printer = get_printer(target_ip, cfg)
-        printer.image(img, impl="bitImageRaster", center=True)
+        printer.image(img, impl=image_mode, center=True)
         printer.cut()
         log.info(f"[{printer_type}] Print OK")
         return jsonify({"id": req_id, "jsonrpc": "2.0", "result": {"status": "ok"}})
@@ -480,7 +725,8 @@ def catch_all(path):
 
 
 if __name__ == "__main__":
+    port = int(os.getenv("PORT", "8069"))
     cfg = load_config()
     log.info(f"IoT Box starting — Receipt: {cfg['receipt_printer_ip']}, Kitchen: {cfg['kitchen_printer_ip']}")
-    log.info("Config UI available at http://0.0.0.0:8069/")
-    app.run(host="0.0.0.0", port=8069, debug=False)
+    log.info(f"Config UI available at http://0.0.0.0:{port}/")
+    app.run(host="0.0.0.0", port=port, debug=False)

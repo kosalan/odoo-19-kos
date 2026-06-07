@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_restaurant_floor_form_inherit_epos" model="ir.ui.view">
+        <field name="name">restaurant.floor.form.inherit.epos</field>
+        <field name="model">restaurant.floor</field>
+        <field name="inherit_id" ref="pos_restaurant.view_restaurant_floor_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='pos_config_ids']" position="after">
+                <field name="epson_printer_ip"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

@@ -1,0 +1,26 @@
+{
+  "receipt_printer_ip": "192.168.50.2",
+  "kitchen_printer_ip": "192.168.50.2",
+  "printer_port": 9100,
+  "printer_timeout": 5,
+  "scan_subnet": "192.168.50",
+  "receipt_image_mode": "graphics",
+  "kitchen_image_mode": "graphics",
+  "floor_printers": [
+    {
+      "floor": "Floor1",
+      "ip": "192.168.50.2",
+      "image_mode": "graphics"
+    },
+    {
+      "floor": "Floor2",
+      "ip": "192.168.50.2",
+      "image_mode": "graphics"
+    },
+    {
+      "floor": "Patio",
+      "ip": "192.168.50.2",
+      "image_mode": "graphics"
+    }
+  ]
+}

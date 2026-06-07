@@ -16,6 +16,9 @@
         back to the waitstaff when finished.
     """,
     'depends': ['point_of_sale', 'pos_restaurant', 'hr_attendance'],
+    'data': [
+        'views/restaurant_floor_views.xml',
+    ],
     'assets': {
         'point_of_sale._assets_pos': [
             'pos_kitchen_lock/static/src/css/kitchen_lock.css',
@@ -23,6 +26,8 @@
             'pos_kitchen_lock/static/src/js/manager_override_dialog.js',
             'pos_kitchen_lock/static/src/js/kitchen_lock.js',
             'pos_kitchen_lock/static/src/js/attendance_kiosk.js',
+            'pos_kitchen_lock/static/src/js/hw_printer_floor.js',
+            'pos_kitchen_lock/static/src/js/floor_epos_printer.js',
             'pos_kitchen_lock/static/src/xml/manager_override_dialog.xml',
             'pos_kitchen_lock/static/src/xml/kitchen_lock.xml',
             'pos_kitchen_lock/static/src/xml/attendance_kiosk.xml',
