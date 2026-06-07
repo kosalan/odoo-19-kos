@@ -114,43 +114,31 @@ def _compute_employee_report(employee, session, company):
     total_sales_revenue = sum(sales_by_method.values())
     cash_sales = sum(v for k, v in sales_by_method.items() if k in cash_method_names)
 
-    # Tip pool calculation:
-    #  - Eligible only if food_sales >= threshold
-    #  - Pool taken from card tips first; cash tips cover any shortfall
-    #  - If total tips (card + cash) cannot cover the target → no pool at all
-    eligible = food_sales >= threshold and threshold > 0
-    target_pool = (food_sales * pool_pct / 100.0) if eligible else 0.0
+    # Tip pool calculation. No payroll — every adjustment goes through the till.
+    #  - Eligible only if total_sales >= threshold.
+    #  - Target = pool_pct % of total_sales.
+    #  - Pool contribution: target when eligible, else 0.
+    #  - Card-tip credit applied to cash owed:
+    #      net = card_tips - pool_contribution
+    #      positive → reduces cash owed (waitress takes the credit out of the till)
+    #      negative → shortfall added to cash owed (she pays the difference)
+    #  - Cash tips are always kept by the waitress.
+    eligible = total_sales_revenue >= threshold and threshold > 0
+    target_pool = (total_sales_revenue * pool_pct / 100.0) if eligible else 0.0
 
+    pool_contribution = target_pool
+    cash_tips_kept = total_cash_tips
+    card_tip_credit = total_card_tips - pool_contribution   # signed
+    tip_pool_shortfall = max(-card_tip_credit, 0.0)        # only positive when card < target
+    cash_credit_from_card_tips = max(card_tip_credit, 0.0)  # only positive when card > pool
     if not eligible:
-        pool_contribution = 0.0
-        cash_tips_kept = total_cash_tips
-        card_tips_to_payroll = total_card_tips
-        tip_pool_shortfall = 0.0
         pool_paid_from = "none"
     elif total_card_tips >= target_pool:
-        # Card tips fully cover the pool
-        pool_contribution = target_pool
-        cash_tips_kept = total_cash_tips
-        card_tips_to_payroll = total_card_tips - target_pool
-        tip_pool_shortfall = 0.0
         pool_paid_from = "card_tips"
-    elif (total_card_tips + total_cash_tips) >= target_pool:
-        # Cash tips fill the gap; pool gets fully paid
-        shortfall = target_pool - total_card_tips
-        pool_contribution = target_pool
-        cash_tips_kept = total_cash_tips - shortfall
-        card_tips_to_payroll = 0.0
-        tip_pool_shortfall = shortfall
-        pool_paid_from = "card_and_cash_tips"
     else:
-        # Neither card nor cash tips cover — no pool contribution
-        pool_contribution = 0.0
-        cash_tips_kept = total_cash_tips
-        card_tips_to_payroll = total_card_tips
-        tip_pool_shortfall = 0.0
-        pool_paid_from = "skipped_insufficient_tips"
+        pool_paid_from = "card_tips_plus_cash_owed"
 
-    total_cash_due_to_till = cash_sales + tip_pool_shortfall
+    total_cash_due_to_till = cash_sales - cash_credit_from_card_tips + tip_pool_shortfall
 
     # Attendance — any punch that OVERLAPS with the session window.
     # (check_in <= session_end) AND (check_out IS NULL OR check_out >= session_start)
@@ -240,15 +228,16 @@ def _compute_employee_report(employee, session, company):
         },
         "payout": {
             "food_sales": round(food_sales, 2),
+            "total_sales": round(total_sales_revenue, 2),
             "threshold": round(threshold, 2),
             "pool_pct": pool_pct,
             "eligible_for_pool": eligible,
             "pool_contribution": round(pool_contribution, 2),
             "cash_sales": round(cash_sales, 2),
             "tip_pool_shortfall": round(tip_pool_shortfall, 2),
+            "cash_credit_from_card_tips": round(cash_credit_from_card_tips, 2),
             "total_cash_due_to_till": round(total_cash_due_to_till, 2),
             "cash_tips_kept": round(cash_tips_kept, 2),
-            "card_tips_to_payroll": round(card_tips_to_payroll, 2),
             "pool_paid_from": pool_paid_from,
         },
     }
@@ -318,35 +307,22 @@ def _compute_range_report(employee, start_dt, end_dt, company):
     total_sales_revenue = sum(sales_by_method.values())
     cash_sales = sum(v for k, v in sales_by_method.items() if k in cash_method_names)
 
-    eligible = food_sales >= threshold and threshold > 0
-    target_pool = (food_sales * pool_pct / 100.0) if eligible else 0.0
+    # Same rule as per-session report — no payroll, everything settles via the till.
+    eligible = total_sales_revenue >= threshold and threshold > 0
+    target_pool = (total_sales_revenue * pool_pct / 100.0) if eligible else 0.0
+    pool_contribution = target_pool
+    cash_tips_kept = total_cash_tips
+    card_tip_credit = total_card_tips - pool_contribution
+    tip_pool_shortfall = max(-card_tip_credit, 0.0)
+    cash_credit_from_card_tips = max(card_tip_credit, 0.0)
     if not eligible:
-        pool_contribution = 0.0
-        cash_tips_kept = total_cash_tips
-        card_tips_to_payroll = total_card_tips
-        tip_pool_shortfall = 0.0
         pool_paid_from = "none"
     elif total_card_tips >= target_pool:
-        pool_contribution = target_pool
-        cash_tips_kept = total_cash_tips
-        card_tips_to_payroll = total_card_tips - target_pool
-        tip_pool_shortfall = 0.0
         pool_paid_from = "card_tips"
-    elif (total_card_tips + total_cash_tips) >= target_pool:
-        shortfall = target_pool - total_card_tips
-        pool_contribution = target_pool
-        cash_tips_kept = total_cash_tips - shortfall
-        card_tips_to_payroll = 0.0
-        tip_pool_shortfall = shortfall
-        pool_paid_from = "card_and_cash_tips"
     else:
-        pool_contribution = 0.0
-        cash_tips_kept = total_cash_tips
-        card_tips_to_payroll = total_card_tips
-        tip_pool_shortfall = 0.0
-        pool_paid_from = "skipped_insufficient_tips"
+        pool_paid_from = "card_tips_plus_cash_owed"
 
-    total_cash_due_to_till = cash_sales + tip_pool_shortfall
+    total_cash_due_to_till = cash_sales - cash_credit_from_card_tips + tip_pool_shortfall
 
     # Attendance within the range
     punches_qs = request.env["hr.attendance"].sudo().search(
@@ -435,15 +411,16 @@ def _compute_range_report(employee, start_dt, end_dt, company):
         },
         "payout": {
             "food_sales": round(food_sales, 2),
+            "total_sales": round(total_sales_revenue, 2),
             "threshold": round(threshold, 2),
             "pool_pct": pool_pct,
             "eligible_for_pool": eligible,
             "pool_contribution": round(pool_contribution, 2),
             "cash_sales": round(cash_sales, 2),
             "tip_pool_shortfall": round(tip_pool_shortfall, 2),
+            "cash_credit_from_card_tips": round(cash_credit_from_card_tips, 2),
             "total_cash_due_to_till": round(total_cash_due_to_till, 2),
             "cash_tips_kept": round(cash_tips_kept, 2),
-            "card_tips_to_payroll": round(card_tips_to_payroll, 2),
             "pool_paid_from": pool_paid_from,
         },
     }
@@ -465,13 +442,11 @@ def _compute_tip_pool_for_range(company, start_date, end_date):
         ]
     )
 
-    # Group orders by employee and track food sales + tips (per period + per day)
-    emp_food_sales = {}          # {emp_id: total_food_sales}
+    # Group orders by employee and track net total sales + tips (per period + per day)
+    emp_total_sales = {}         # {emp_id: total_net_sales}
     emp_card_tips = {}           # {emp_id: total_card_tips}
-    emp_cash_tips = {}           # {emp_id: total_cash_tips}
-    daily_emp_food = {}          # {(date_str, emp_id): food_sales}
+    daily_emp_total = {}         # {(date_str, emp_id): total_net_sales}
     daily_emp_card_tips = {}     # {(date_str, emp_id): card_tips}
-    daily_emp_cash_tips = {}     # {(date_str, emp_id): cash_tips}
     for session in sessions:
         orders = request.env["pos.order"].sudo().search(
             [
@@ -487,17 +462,15 @@ def _compute_tip_pool_for_range(company, start_date, end_date):
             emp_id = order.employee_id.id
             day_key = fields.Date.to_string(order.date_order.date())
 
-            food_subtotal = 0.0
-            for line in order.lines:
-                if _line_category_matches(line, food_ids):
-                    food_subtotal += line.price_subtotal_incl or 0.0
-            emp_food_sales.setdefault(emp_id, 0.0)
-            emp_food_sales[emp_id] += food_subtotal
-            daily_emp_food.setdefault((day_key, emp_id), 0.0)
-            daily_emp_food[(day_key, emp_id)] += food_subtotal
-
-            # Attribute the tip to cash vs card using the same heuristic as the per-employee report
+            # Net sales = total - tax - tip (i.e., what the food/bar items added up to before tax/tip)
             order_tip = order.tip_amount or 0.0
+            net_sales = (order.amount_total or 0.0) - (order.amount_tax or 0.0) - order_tip
+            emp_total_sales.setdefault(emp_id, 0.0)
+            emp_total_sales[emp_id] += net_sales
+            daily_emp_total.setdefault((day_key, emp_id), 0.0)
+            daily_emp_total[(day_key, emp_id)] += net_sales
+
+            # Only card tips matter for pool — cash tips ignored (not reliably reported)
             if order_tip:
                 payments = order.payment_ids.filtered(lambda p: p.amount != 0)
                 non_cash = payments.filtered(lambda p: not p.payment_method_id.is_cash_count)
@@ -506,25 +479,17 @@ def _compute_tip_pool_for_range(company, start_date, end_date):
                     emp_card_tips[emp_id] += order_tip
                     daily_emp_card_tips.setdefault((day_key, emp_id), 0.0)
                     daily_emp_card_tips[(day_key, emp_id)] += order_tip
-                else:
-                    emp_cash_tips.setdefault(emp_id, 0.0)
-                    emp_cash_tips[emp_id] += order_tip
-                    daily_emp_cash_tips.setdefault((day_key, emp_id), 0.0)
-                    daily_emp_cash_tips[(day_key, emp_id)] += order_tip
 
-    # Apply threshold AND "total tips must cover" per employee (period total)
+    # Pool contribution per qualifying employee (total_sales >= threshold).
+    # Cash tips ignored. Card tips < target → waitress pays the shortfall in cash;
+    # pool still receives the full target in every qualifying case.
     total_pool = 0.0
     contributors = []
     contributing_emp_ids = set()
-    for emp_id, food_sales in emp_food_sales.items():
-        if food_sales < threshold or threshold <= 0:
+    for emp_id, total_sales in emp_total_sales.items():
+        if total_sales < threshold or threshold <= 0:
             continue
-        target = food_sales * pool_pct / 100.0
-        card_tips = emp_card_tips.get(emp_id, 0.0)
-        cash_tips = emp_cash_tips.get(emp_id, 0.0)
-        if (card_tips + cash_tips) < target:
-            # Tips don't cover the target — no contribution at all
-            continue
+        target = total_sales * pool_pct / 100.0
         total_pool += target
         contributing_emp_ids.add(emp_id)
         emp = request.env["hr.employee"].sudo().browse(emp_id)
@@ -532,29 +497,24 @@ def _compute_tip_pool_for_range(company, start_date, end_date):
             {
                 "employee_id": emp.id if emp.exists() else None,
                 "employee_name": emp.name if emp.exists() else "Unknown",
-                "food_sales": round(food_sales, 2),
+                "food_sales": round(total_sales, 2),  # legacy key name kept for UI compat
                 "contribution": round(target, 2),
             }
         )
 
-    # Daily breakdown — only for contributing employees, only show days where
-    # the employee's tips that day covered the day's target.
+    # Daily breakdown — every day a qualifying employee had sales counts.
     daily_breakdown = []
-    for (day, emp_id), day_food in sorted(daily_emp_food.items(), reverse=True):
+    for (day, emp_id), day_sales in sorted(daily_emp_total.items(), reverse=True):
         if emp_id not in contributing_emp_ids:
             continue
-        day_target = day_food * pool_pct / 100.0
-        day_card = daily_emp_card_tips.get((day, emp_id), 0.0)
-        day_cash = daily_emp_cash_tips.get((day, emp_id), 0.0)
-        if (day_card + day_cash) < day_target:
-            continue
+        day_target = day_sales * pool_pct / 100.0
         emp = request.env["hr.employee"].sudo().browse(emp_id)
         daily_breakdown.append(
             {
                 "date": day,
                 "employee_id": emp_id,
                 "employee_name": emp.name if emp.exists() else "Unknown",
-                "food_sales": round(day_food, 2),
+                "food_sales": round(day_sales, 2),  # legacy key name kept for UI compat
                 "contribution": round(day_target, 2),
             }
         )
@@ -931,29 +891,18 @@ class PosReportingController(http.Controller):
             food = ed["food_sales"]
             cash_tips = ed["tip_cash"]
             card_tips = ed["tip_card"]
-            eligible = food >= threshold and threshold > 0
-            target = (food * pool_pct / 100.0) if eligible else 0.0
-            if not eligible:
-                pool_contribution = 0.0
-                cash_tips_kept = cash_tips
-                card_to_payroll = card_tips
-                shortfall = 0.0
-            elif card_tips >= target:
-                pool_contribution = target
-                cash_tips_kept = cash_tips
-                card_to_payroll = card_tips - target
-                shortfall = 0.0
-            elif (card_tips + cash_tips) >= target:
-                shortfall = target - card_tips
-                pool_contribution = target
-                cash_tips_kept = cash_tips - shortfall
-                card_to_payroll = 0.0
-            else:
-                pool_contribution = 0.0
-                cash_tips_kept = cash_tips
-                card_to_payroll = card_tips
-                shortfall = 0.0
-            cash_due = ed["cash_sales"] + shortfall
+            # Total net sales = sum of revenue across all payment methods
+            net_total_sales = sum(ed["methods"].values())
+            # No payroll — settle via the till. card_credit applied to cash owed.
+            eligible = net_total_sales >= threshold and threshold > 0
+            target = (net_total_sales * pool_pct / 100.0) if eligible else 0.0
+            pool_contribution = target
+            cash_tips_kept = cash_tips
+            card_tip_credit = card_tips - pool_contribution
+            shortfall = max(-card_tip_credit, 0.0)
+            cash_credit = max(card_tip_credit, 0.0)
+            card_to_payroll = 0.0  # never any payroll
+            cash_due = ed["cash_sales"] - cash_credit + shortfall
             total_pool += pool_contribution
             total_cash_receivable += cash_due
             by_employee.append(
@@ -970,11 +919,12 @@ class PosReportingController(http.Controller):
                     "tip_total": round(cash_tips + card_tips, 2),
                     "food_sales": round(food, 2),
                     "bar_sales": round(ed["bar_sales"], 2),
+                    "total_sales": round(net_total_sales, 2),
                     "pool_contribution": round(pool_contribution, 2),
                     "tip_pool_shortfall": round(shortfall, 2),
+                    "cash_credit_from_card_tips": round(cash_credit, 2),
                     "cash_due_to_till": round(cash_due, 2),
                     "cash_tips_kept": round(cash_tips_kept, 2),
-                    "card_tips_to_payroll": round(card_to_payroll, 2),
                 }
             )
         by_employee.sort(key=lambda r: -r["cash_due_to_till"])

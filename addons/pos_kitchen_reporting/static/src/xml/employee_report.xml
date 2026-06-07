@@ -97,25 +97,29 @@
 
                     <t t-if="props.data.payout.eligible_for_pool">
                         <div class="rep-kv">
-                            <span>Pool Contribution (<t t-esc="props.data.payout.pool_pct"/>% of food)</span>
+                            <span>Pool Contribution (<t t-esc="props.data.payout.pool_pct"/>% of total sales)</span>
                             <span t-esc="fmt(props.data.payout.pool_contribution)"/>
                         </div>
                     </t>
                     <t t-else="">
                         <div class="rep-kv rep-muted">
                             <span>Not eligible for pool</span>
-                            <span>Food &lt; <t t-esc="fmt(props.data.payout.threshold)"/></span>
+                            <span>Total Sales &lt; <t t-esc="fmt(props.data.payout.threshold)"/></span>
                         </div>
                     </t>
 
                     <hr/>
                     <div class="rep-kv">
-                        <span>Cash Sales (to till)</span>
+                        <span>Cash Sales</span>
                         <span t-esc="fmt(props.data.payout.cash_sales)"/>
                     </div>
+                    <div t-if="props.data.payout.cash_credit_from_card_tips &gt; 0" class="rep-kv rep-kv-keep">
+                        <span>– Card Tips Credit (you take from till)</span>
+                        <span>– <t t-esc="fmt(props.data.payout.cash_credit_from_card_tips)"/></span>
+                    </div>
                     <div t-if="props.data.payout.tip_pool_shortfall &gt; 0" class="rep-kv">
-                        <span>Tip Pool Shortfall (cash)</span>
-                        <span t-esc="fmt(props.data.payout.tip_pool_shortfall)"/>
+                        <span>+ Tip Pool Shortfall (you pay in cash)</span>
+                        <span>+ <t t-esc="fmt(props.data.payout.tip_pool_shortfall)"/></span>
                     </div>
                     <div class="rep-kv rep-kv-due">
                         <span>Total Cash Due to Till</span>
@@ -126,10 +130,6 @@
                     <div class="rep-kv rep-kv-keep">
                         <span>Cash Tips You Keep</span>
                         <span t-esc="fmt(props.data.payout.cash_tips_kept)"/>
-                    </div>
-                    <div class="rep-kv rep-kv-payroll">
-                        <span>Card Tips → Payroll</span>
-                        <span t-esc="fmt(props.data.payout.card_tips_to_payroll)"/>
                     </div>
                 </div>
 

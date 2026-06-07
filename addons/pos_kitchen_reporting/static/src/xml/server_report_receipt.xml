@@ -73,17 +73,22 @@
                 </div>
             </t>
             <t t-else="">
-                <div style="font-style:italic;">Pool: not eligible (food &lt;
+                <div style="font-style:italic;">Pool: not eligible (total sales &lt;
                     <t t-esc="fmt(props.data.payout.threshold)"/>)
                 </div>
             </t>
             <div style="display:flex; justify-content:space-between;">
                 <span>Cash Sales</span><span t-esc="fmt(props.data.payout.cash_sales)"/>
             </div>
+            <div t-if="props.data.payout.cash_credit_from_card_tips &gt; 0"
+                 style="display:flex; justify-content:space-between;">
+                <span>Card Tips Credit</span>
+                <span>– <t t-esc="fmt(props.data.payout.cash_credit_from_card_tips)"/></span>
+            </div>
             <div t-if="props.data.payout.tip_pool_shortfall &gt; 0"
                  style="display:flex; justify-content:space-between;">
-                <span>Tip Pool Shortfall</span>
-                <span t-esc="fmt(props.data.payout.tip_pool_shortfall)"/>
+                <span>Pool Shortfall</span>
+                <span>+ <t t-esc="fmt(props.data.payout.tip_pool_shortfall)"/></span>
             </div>
             <div style="display:flex; justify-content:space-between; font-weight:bold;">
                 <span>Cash Due to Till</span>
@@ -92,10 +97,6 @@
             <div style="display:flex; justify-content:space-between;">
                 <span>Cash Tips Kept</span>
                 <span t-esc="fmt(props.data.payout.cash_tips_kept)"/>
-            </div>
-            <div style="display:flex; justify-content:space-between;">
-                <span>Card Tips Payroll</span>
-                <span t-esc="fmt(props.data.payout.card_tips_to_payroll)"/>
             </div>
 
         </div>
